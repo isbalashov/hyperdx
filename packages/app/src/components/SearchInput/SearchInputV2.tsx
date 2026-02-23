@@ -95,7 +95,11 @@ export default function SearchInputV2({
         ref.current?.focus();
       }
     },
-    { preventDefault: true },
+    {
+      preventDefault: true,
+      enableOnFormTags: false,
+      enableOnContentEditable: false,
+    },
     [enableHotkey],
   );
 

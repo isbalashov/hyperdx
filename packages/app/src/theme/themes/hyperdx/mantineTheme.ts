@@ -273,6 +273,9 @@ export const makeTheme = ({
         root: {
           background: 'var(--color-bg-field)',
         },
+        indicator: {
+          background: 'var(--color-bg-field-highlighted)',
+        },
       }),
     }),
     Tabs: Tabs.extend({

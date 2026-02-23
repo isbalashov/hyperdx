@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { useController, UseControllerProps } from 'react-hook-form';
+import { FieldPath, useController, UseControllerProps } from 'react-hook-form';
 import { TableConnectionChoice } from '@hyperdx/common-utils/dist/core/metadata';
 import { Box, Flex, Kbd } from '@mantine/core';
 
@@ -99,6 +98,11 @@ export type SearchWhereInputProps = {
    * Additional autocomplete/suggestion options (e.g. attribute names)
    */
   additionalSuggestions?: string[];
+  /**
+   * Form field name for the language value ('sql' | 'lucene').
+   * If not provided, defaults to `${name}Language` (e.g. name="where" → "whereLanguage").
+   */
+  languageName?: string;
 } & TableConnectionChoice &
   UseControllerProps<any>;
 
@@ -107,9 +111,7 @@ export type SearchWhereInputProps = {
  *
  * This component expects two form fields:
  * - `name` (e.g., "where") - The actual search query value
- * - A corresponding language field (e.g., "whereLanguage") - Controls which mode is active
- *
- * The component reads the language from `{name}Language` field automatically.
+ * - The language field - controlled by `languageName` (defaults to `${name}Language`, e.g. "whereLanguage")
  *
  * @example
  * ```tsx
@@ -117,6 +119,7 @@ export type SearchWhereInputProps = {
  *   tableConnection={tcFromSource(source)}
  *   control={control}
  *   name="where"
+ *   languageName="whereLanguage"
  *   onSubmit={handleSubmit}
  *   onLanguageChange={lang => setValue('whereLanguage', lang, { shouldDirty: true })}
  *   enableHotkey
@@ -143,25 +146,15 @@ export default function SearchWhereInput({
   maxWidth = '100%',
   'data-testid': dataTestId,
   additionalSuggestions,
+  languageName = `${name}Language`,
 }: SearchWhereInputProps) {
-  // Read the language value from the corresponding language field
-  const languageFieldName = `${name}Language` as any;
   const { field: languageField } = useController({
     control,
-    name: languageFieldName,
+    name: languageName as FieldPath<any>,
   });
 
   const language: 'sql' | 'lucene' = languageField.value ?? 'lucene';
   const isSql = language === 'sql';
-
-  // Apply stored preference on mount so the user's last choice is restored (parents often default to 'lucene')
-  useEffect(() => {
-    const stored = getStoredLanguage();
-    if (stored && languageField.value !== stored) {
-      languageField.onChange(stored);
-      onLanguageChange?.(stored);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only run on mount to apply stored preference once
 
   const handleLanguageChange = (lang: 'sql' | 'lucene') => {
     setStoredLanguage(lang);

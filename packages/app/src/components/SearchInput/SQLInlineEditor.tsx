@@ -336,7 +336,11 @@ export default function SQLInlineEditor({
         ref.current?.view?.focus();
       }
     },
-    { preventDefault: true },
+    {
+      preventDefault: true,
+      enableOnFormTags: false,
+      enableOnContentEditable: false,
+    },
     [enableHotkey],
   );
 
