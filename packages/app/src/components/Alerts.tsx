@@ -6,7 +6,7 @@ import {
   type AlertChannelType,
   WebhookService,
 } from '@hyperdx/common-utils/dist/types';
-import { Button, ComboboxData, Group, Modal } from '@mantine/core';
+import { Button, ComboboxData, Group, Modal, Stack, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 
 import api from '@/api';
@@ -16,6 +16,7 @@ import { WebhookForm } from '../components/TeamSettings/WebhookForm';
 type Webhook = {
   _id: string;
   name: string;
+  description?: string;
 };
 
 const WebhookChannelForm = <T extends object>(
@@ -35,6 +36,7 @@ const WebhookChannelForm = <T extends object>(
       webhooks?.data.map((sw: Webhook) => ({
         value: sw._id,
         label: sw.name,
+        description: sw.description,
       })) || [];
 
     return [
@@ -77,6 +79,16 @@ const WebhookChannelForm = <T extends object>(
           data={options}
           name={props.name!}
           control={props.control}
+          renderOption={({ option }) => (
+            <Stack gap={0}>
+              <Text size="sm">{option.label}</Text>
+              {(option as any).description && (
+                <Text size="xs" c="dimmed">
+                  {(option as any).description}
+                </Text>
+              )}
+            </Stack>
+          )}
           {...props}
         />
         <Button size="xs" variant="subtle" color="gray" onClick={open}>

@@ -125,15 +125,24 @@ export default function WebhooksSection() {
                   {webhooks.map(webhook => (
                     <Fragment key={webhook._id}>
                       <Group justify="space-between" align="flex-start">
-                        <Stack gap={0}>
+                        <Stack gap={2}>
                           <Text size="sm">
                             {webhook.name} ({webhook.service})
                           </Text>
-                          <Text size="xs" opacity={0.7}>
-                            {webhook.url}
-                          </Text>
+                          {webhook.url && (
+                            <Text
+                              size="xs"
+                              c="dimmed"
+                              style={{
+                                fontFamily: 'monospace',
+                                wordBreak: 'break-all',
+                              }}
+                            >
+                              {webhook.url}
+                            </Text>
+                          )}
                           {webhook.description && (
-                            <Text size="xxs" opacity={0.7}>
+                            <Text size="xs" fs="italic" c="gray.4" mt={2}>
                               {webhook.description}
                             </Text>
                           )}
