@@ -801,7 +801,7 @@ const queryStateMap = {
   where: parseAsStringWithNewLines,
   select: parseAsStringWithNewLines,
   whereLanguage: parseAsStringEnum<'sql' | 'lucene'>(['sql', 'lucene']),
-  filters: parseAsJson<Filter[]>(),
+  filters: parseAsJson<Filter[]>(v => v as Filter[]),
   orderBy: parseAsStringWithNewLines,
 };
 

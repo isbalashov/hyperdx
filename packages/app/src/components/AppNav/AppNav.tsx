@@ -434,9 +434,10 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
     from: parseAsInteger.withDefault(-1),
     to: parseAsInteger.withDefault(-1),
   });
-  const [inputTimeQuery] = useQueryState('tq', parseAsString.withDefault(''), {
-    history: 'push',
-  });
+  const [inputTimeQuery] = useQueryState(
+    'tq',
+    parseAsString.withDefault('').withOptions({ history: 'push' }),
+  );
 
   const { data: meData } = api.useMe();
 
