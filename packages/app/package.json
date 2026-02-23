@@ -72,7 +72,7 @@
     "next-runtime-env": "1",
     "next-seo": "^4.28.1",
     "numbro": "^2.4.0",
-    "nuqs": "1.17.0",
+    "nuqs": "^2.8.8",
     "object-hash": "^3.0.0",
     "react": "^19.2.3",
     "react-copy-to-clipboard": "^5.1.0",

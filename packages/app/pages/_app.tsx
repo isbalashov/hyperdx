@@ -5,6 +5,7 @@ import Head from 'next/head';
 import { NextAdapter } from 'next-query-params';
 import randomUUID from 'crypto-randomuuid';
 import { enableMapSet } from 'immer';
+import { NuqsAdapter } from 'nuqs/adapters/next/pages';
 import { QueryParamProvider } from 'use-query-params';
 import HyperDX from '@hyperdx/browser';
 import {
@@ -175,14 +176,16 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
       <AppThemeProvider>
         <AppHeadContent />
         <DynamicFavicon />
-        <HDXQueryParamProvider>
-          <QueryParamProvider adapter={NextAdapter}>
-            <QueryClientProvider client={queryClient}>
-              <AppContent Component={Component} pageProps={pageProps} />
-              <ReactQueryDevtools initialIsOpen={true} />
-            </QueryClientProvider>
-          </QueryParamProvider>
-        </HDXQueryParamProvider>
+        <NuqsAdapter>
+          <HDXQueryParamProvider>
+            <QueryParamProvider adapter={NextAdapter}>
+              <QueryClientProvider client={queryClient}>
+                <AppContent Component={Component} pageProps={pageProps} />
+                <ReactQueryDevtools initialIsOpen={true} />
+              </QueryClientProvider>
+            </QueryParamProvider>
+          </HDXQueryParamProvider>
+        </NuqsAdapter>
       </AppThemeProvider>
     </React.Fragment>
   );
