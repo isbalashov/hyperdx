@@ -577,6 +577,7 @@ export default function EditTimeChartForm({
   onTimeRangeSelect,
   onClose,
   onDirtyChange,
+  openAlertEditor,
   'data-testid': dataTestId,
   submitRef,
 }: {
@@ -592,6 +593,7 @@ export default function EditTimeChartForm({
   onClose?: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onTimeRangeSelect?: (start: Date, end: Date) => void;
+  openAlertEditor?: boolean;
   'data-testid'?: string;
   submitRef?: React.MutableRefObject<(() => void) | undefined>;
 }) {
@@ -673,6 +675,14 @@ export default function EditTimeChartForm({
       setValue('alert', undefined);
     }
   }, [displayType, setValue]);
+
+  useEffect(() => {
+    if (openAlertEditor && !chartConfig.alert) {
+      setValue('alert', DEFAULT_TILE_ALERT);
+    }
+    // Only run on mount when openAlertEditor is true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showGeneratedSql = ['table', 'time', 'number', 'pie'].includes(
     activeTab,

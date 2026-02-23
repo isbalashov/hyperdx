@@ -123,6 +123,7 @@ const Tile = forwardRef(
       dateRange,
       onDuplicateClick,
       onEditClick,
+      onAddAlertClick,
       onDeleteClick,
       onUpdateChart,
       granularity,
@@ -264,7 +265,7 @@ const Tile = forwardRef(
                   data-testid={`tile-alerts-button-${chart.id}`}
                   variant="subtle"
                   size="sm"
-                  onClick={onEditClick}
+                  onClick={onAddAlertClick ?? onEditClick}
                 >
                   <IconBell size={16} />
                 </ActionIcon>
@@ -320,6 +321,7 @@ const Tile = forwardRef(
       chart.config.displayType,
       chart.id,
       hovered,
+      onAddAlertClick,
       onDeleteClick,
       onDuplicateClick,
       onEditClick,
@@ -521,6 +523,7 @@ const EditTileModal = ({
   onSave,
   isSaving,
   dateRange,
+  openAlertEditor,
 }: {
   dashboardId?: string;
   chart: Tile | undefined;
@@ -528,6 +531,7 @@ const EditTileModal = ({
   dateRange: [Date, Date];
   isSaving?: boolean;
   onSave: (chart: Tile) => void;
+  openAlertEditor?: boolean;
 }) => {
   const contextZIndex = useZIndex();
   const modalZIndex = contextZIndex + 10;
@@ -571,6 +575,7 @@ const EditTileModal = ({
             chartConfig={chart.config}
             dateRange={dateRange}
             isSaving={isSaving}
+            openAlertEditor={openAlertEditor}
             onSave={config => {
               onSave({
                 ...chart,
@@ -816,6 +821,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
   };
 
   const [editedTile, setEditedTile] = useState<undefined | Tile>();
+  const [openAlertEditor, setOpenAlertEditor] = useState(false);
 
   const onAddTile = () => {
     setEditedTile({
@@ -852,6 +858,10 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
             chart={chart}
             dateRange={searchedTimeRange}
             onEditClick={() => setEditedTile(chart)}
+            onAddAlertClick={() => {
+              setEditedTile(chart);
+              setOpenAlertEditor(true);
+            }}
             granularity={
               isRefreshEnabled
                 ? granularityOverride
@@ -1018,8 +1028,12 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
       <EditTileModal
         dashboardId={dashboardId}
         chart={editedTile}
+        openAlertEditor={openAlertEditor}
         onClose={() => {
-          if (!isSaving) setEditedTile(undefined);
+          if (!isSaving) {
+            setEditedTile(undefined);
+            setOpenAlertEditor(false);
+          }
         }}
         dateRange={searchedTimeRange}
         isSaving={isSaving}
@@ -1042,6 +1056,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
             }),
             () => {
               setEditedTile(undefined);
+              setOpenAlertEditor(false);
               setIsSaving(false);
             },
             () => {
