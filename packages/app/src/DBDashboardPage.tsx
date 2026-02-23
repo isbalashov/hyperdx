@@ -78,6 +78,7 @@ import {
 } from '@/dashboard';
 
 import ChartContainer from './components/charts/ChartContainer';
+import { DBPieChart } from './components/DBPieChart';
 import DBSqlRowTableWithSideBar from './components/DBSqlRowTableWithSidebar';
 import OnboardingModal from './components/OnboardingModal';
 import SearchWhereInput, {
@@ -86,6 +87,7 @@ import SearchWhereInput, {
 import { Tags } from './components/Tags';
 import useDashboardFilters from './hooks/useDashboardFilters';
 import { useDashboardRefresh } from './hooks/useDashboardRefresh';
+import { useBrandDisplayName } from './theme/ThemeProvider';
 import { parseAsStringWithNewLines } from './utils/queryParsers';
 import { buildTableRowSearchUrl, DEFAULT_CHART_CONFIG } from './ChartUtils';
 import { IS_LOCAL_MODE } from './config';
@@ -396,6 +398,14 @@ const Tile = forwardRef(
                 config={queriedConfig}
               />
             )}
+            {queriedConfig?.displayType === DisplayType.Pie && (
+              <DBPieChart
+                key={`${keyPrefix}-${chart.id}`}
+                title={title}
+                toolbarPrefix={toolbar}
+                config={queriedConfig}
+              />
+            )}
             {/* Markdown charts may not have queriedConfig, if source is not set */}
             {(queriedConfig?.displayType === DisplayType.Markdown ||
               (!queriedConfig &&
@@ -522,10 +532,33 @@ const EditTileModal = ({
 }) => {
   const contextZIndex = useZIndex();
   const modalZIndex = contextZIndex + 10;
+  const confirm = useConfirm();
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  useEffect(() => {
+    if (chart != null) {
+      setHasUnsavedChanges(false);
+    }
+  }, [chart]);
+
+  const handleClose = useCallback(() => {
+    if (isSaving) return;
+    if (hasUnsavedChanges) {
+      confirm(
+        'You have unsaved changes. Discard them and close the editor?',
+        'Discard',
+      ).then(ok => {
+        if (ok) onClose();
+      });
+    } else {
+      onClose();
+    }
+  }, [confirm, isSaving, hasUnsavedChanges, onClose]);
+
   return (
     <Modal
       opened={chart != null}
-      onClose={onClose}
+      onClose={handleClose}
       withCloseButton={false}
       centered
       size="90%"
@@ -545,7 +578,8 @@ const EditTileModal = ({
                 config: config,
               });
             }}
-            onClose={onClose}
+            onClose={handleClose}
+            onDirtyChange={setHasUnsavedChanges}
           />
         </ZIndexContext.Provider>
       )}
@@ -643,6 +677,7 @@ function downloadObjectAsJson(object: object, fileName = 'output') {
 }
 
 function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
+  const brandName = useBrandDisplayName();
   const confirm = useConfirm();
 
   const router = useRouter();
@@ -981,16 +1016,14 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
   return (
     <Box p="sm" data-testid="dashboard-page">
       <Head>
-        <title>Dashboard – HyperDX</title>
+        <title>Dashboard – {brandName}</title>
       </Head>
       <OnboardingModal />
       <EditTileModal
         dashboardId={dashboardId}
         chart={editedTile}
         onClose={() => {
-          if (!isSaving) {
-            setEditedTile(undefined);
-          }
+          if (!isSaving) setEditedTile(undefined);
         }}
         dateRange={searchedTimeRange}
         isSaving={isSaving}

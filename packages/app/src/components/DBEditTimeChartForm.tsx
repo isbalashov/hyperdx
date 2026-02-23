@@ -51,6 +51,7 @@ import {
   IconArrowUp,
   IconBell,
   IconChartLine,
+  IconChartPie,
   IconCirclePlus,
   IconCode,
   IconDotsVertical,
@@ -110,6 +111,7 @@ import ChartDisplaySettingsDrawer, {
   ChartConfigDisplaySettings,
 } from './ChartDisplaySettingsDrawer';
 import DBNumberChart from './DBNumberChart';
+import { DBPieChart } from './DBPieChart';
 import DBSqlRowTableWithSideBar from './DBSqlRowTableWithSidebar';
 import {
   CheckBoxControlled,
@@ -554,6 +556,7 @@ export default function EditTimeChartForm({
   onSave,
   onTimeRangeSelect,
   onClose,
+  onDirtyChange,
   'data-testid': dataTestId,
   submitRef,
 }: {
@@ -567,6 +570,7 @@ export default function EditTimeChartForm({
   setDisplayedTimeInputValue?: (value: string) => void;
   onSave?: (chart: SavedChartConfig) => void;
   onClose?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
   onTimeRangeSelect?: (start: Date, end: Date) => void;
   'data-testid'?: string;
   submitRef?: React.MutableRefObject<(() => void) | undefined>;
@@ -588,7 +592,7 @@ export default function EditTimeChartForm({
     register,
     setError,
     clearErrors,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<SavedChartConfigWithSeries>({
     defaultValues: configWithSeries,
     values: configWithSeries,
@@ -604,6 +608,10 @@ export default function EditTimeChartForm({
     control: control as Control<SavedChartConfigWithSeries>,
     name: 'series',
   });
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   const [isSampleEventsOpen, setIsSampleEventsOpen] = useState(false);
 
@@ -630,6 +638,8 @@ export default function EditTimeChartForm({
         return 'markdown';
       case DisplayType.Table:
         return 'table';
+      case DisplayType.Pie:
+        return 'pie';
       case DisplayType.Number:
         return 'number';
       default:
@@ -643,7 +653,9 @@ export default function EditTimeChartForm({
     }
   }, [displayType, setValue]);
 
-  const showGeneratedSql = ['table', 'time', 'number'].includes(activeTab); // Whether to show the generated SQL preview
+  const showGeneratedSql = ['table', 'time', 'number', 'pie'].includes(
+    activeTab,
+  ); // Whether to show the generated SQL preview
   const showSampleEvents = tableSource?.kind !== SourceKind.Metric;
 
   const [
@@ -948,6 +960,7 @@ export default function EditTimeChartForm({
             filtersLogicalOperator: 'OR' as const,
             groupBy: undefined,
             granularity: undefined,
+            having: undefined,
           }
         : null,
     [queriedConfig, tableSource, dateRange, queryReady],
@@ -1002,6 +1015,12 @@ export default function EditTimeChartForm({
                 leftSection={<IconNumbers size={16} />}
               >
                 Number
+              </Tabs.Tab>
+              <Tabs.Tab
+                value={DisplayType.Pie}
+                leftSection={<IconChartPie size={16} />}
+              >
+                Pie
               </Tabs.Tab>
               <Tabs.Tab
                 value={DisplayType.Search}
@@ -1456,6 +1475,14 @@ export default function EditTimeChartForm({
           />
         </div>
       )}
+      {queryReady && dbTimeChartConfig != null && activeTab === 'pie' && (
+        <div className="flex-grow-1 d-flex flex-column" style={{ height: 400 }}>
+          <DBPieChart
+            config={dbTimeChartConfig}
+            showMVOptimizationIndicator={false}
+          />
+        </div>
+      )}
       {queryReady && queriedConfig != null && activeTab === 'number' && (
         <div className="flex-grow-1 d-flex flex-column" style={{ height: 400 }}>
           <DBNumberChart
@@ -1496,6 +1523,7 @@ export default function EditTimeChartForm({
                     ? queriedConfig.select
                     : tableSource?.defaultTableSelectExpression || '',
                 groupBy: undefined,
+                having: undefined,
                 granularity: undefined,
               }}
               enabled
