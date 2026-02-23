@@ -330,7 +330,7 @@ export default function PodDetailsSidePanel({
       // If we're in a nested side panel, don't close the drawer
       return;
     }
-    setPodName(undefined);
+    setPodName(null);
   }, [rowId, setPodName]);
 
   if (!podName) {

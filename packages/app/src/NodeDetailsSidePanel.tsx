@@ -330,7 +330,7 @@ export default function NodeDetailsSidePanel({
   ]);
 
   const handleClose = React.useCallback(() => {
-    setNodeName(undefined);
+    setNodeName(null);
   }, [setNodeName]);
 
   if (!nodeName) {

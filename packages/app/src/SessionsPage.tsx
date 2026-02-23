@@ -353,9 +353,9 @@ export default function SessionsPage() {
     (session: Session | undefined) => {
       if (session == null) {
         setSelectedSessionQuery({
-          sid: undefined,
-          sfrom: undefined,
-          sto: undefined,
+          sid: null,
+          sfrom: null,
+          sto: null,
         });
       } else {
         setSelectedSessionQuery({

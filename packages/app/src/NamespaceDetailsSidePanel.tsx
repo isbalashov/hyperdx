@@ -317,7 +317,7 @@ export default function NamespaceDetailsSidePanel({
   ]);
 
   const handleClose = React.useCallback(() => {
-    setNamespaceName(undefined);
+    setNamespaceName(null);
   }, [setNamespaceName]);
 
   if (!namespaceName) {
