@@ -1,7 +1,7 @@
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { sq } from 'date-fns/locale';
 import ms from 'ms';
-import { parseAsString, useQueryState } from 'nuqs';
+import { useQueryState } from 'nuqs';
 import { useForm, useWatch } from 'react-hook-form';
 import { tcFromSource } from '@hyperdx/common-utils/dist/core/metadata';
 import {
@@ -17,6 +17,7 @@ import { RowWhereResult, WithClause } from '@/hooks/useRowWhere';
 import SearchInputV2 from '@/SearchInputV2';
 import { useSource } from '@/source';
 import { formatAttributeClause } from '@/utils';
+import { parseAsStringEncoded } from '@/utils/queryParsers';
 
 import { ROW_DATA_ALIASES } from './DBRowDataPanel';
 import DBRowSidePanel, { RowSidePanelContext } from './DBRowSidePanel';
@@ -48,8 +49,8 @@ interface ContextSubpanelProps {
 export function useNestedPanelState(isNested?: boolean) {
   // Query state (URL-based) for root level
   const queryState = {
-    contextRowId: useQueryState('contextRowId', parseAsString),
-    contextRowSource: useQueryState('contextRowSource', parseAsString),
+    contextRowId: useQueryState('contextRowId', parseAsStringEncoded),
+    contextRowSource: useQueryState('contextRowSource'),
   };
 
   // Local state for nested levels
