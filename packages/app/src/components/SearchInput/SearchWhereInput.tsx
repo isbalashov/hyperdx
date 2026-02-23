@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useController, UseControllerProps } from 'react-hook-form';
 import { TableConnectionChoice } from '@hyperdx/common-utils/dist/core/metadata';
 import { Box, Flex, Kbd } from '@mantine/core';
@@ -7,6 +8,34 @@ import SearchInputV2 from './SearchInputV2';
 import { SQLInlineEditorControlled } from './SQLInlineEditor';
 
 import styles from './SearchWhereInput.module.scss';
+
+const STORAGE_KEY = 'hdx-search-where-language';
+
+/**
+ * Returns the user's stored WHERE language preference, or null if none or unavailable.
+ * Use when building form/URL defaults so the same selection applies across pages and on navigation.
+ */
+export function getStoredLanguage(): 'sql' | 'lucene' | null {
+  try {
+    const stored =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem(STORAGE_KEY)
+        : null;
+    if (stored === 'sql' || stored === 'lucene') return stored;
+  } catch {
+    // localStorage may throw in private browsing
+  }
+  return null;
+}
+
+function setStoredLanguage(lang: 'sql' | 'lucene'): void {
+  try {
+    if (typeof window !== 'undefined')
+      window.localStorage.setItem(STORAGE_KEY, lang);
+  } catch {
+    // localStorage may throw in private browsing
+  }
+}
 
 export type SearchWhereInputProps = {
   /**
@@ -125,7 +154,17 @@ export default function SearchWhereInput({
   const language: 'sql' | 'lucene' = languageField.value ?? 'lucene';
   const isSql = language === 'sql';
 
+  // Apply stored preference on mount so the user's last choice is restored (parents often default to 'lucene')
+  useEffect(() => {
+    const stored = getStoredLanguage();
+    if (stored && languageField.value !== stored) {
+      languageField.onChange(stored);
+      onLanguageChange?.(stored);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only run on mount to apply stored preference once
+
   const handleLanguageChange = (lang: 'sql' | 'lucene') => {
+    setStoredLanguage(lang);
     languageField.onChange(lang);
     onLanguageChange?.(lang);
   };

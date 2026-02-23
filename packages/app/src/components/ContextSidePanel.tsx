@@ -12,6 +12,7 @@ import { Badge, Flex, Group, SegmentedControl } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 
 import SearchInputV2 from '@/components/SearchInput/SearchInputV2';
+import { getStoredLanguage } from '@/components/SearchInput/SearchWhereInput';
 import { SQLInlineEditorControlled } from '@/components/SearchInput/SQLInlineEditor';
 import WhereLanguageControlled from '@/components/WhereLanguageControlled';
 import { RowWhereResult, WithClause } from '@/hooks/useRowWhere';
@@ -86,7 +87,10 @@ export default function ContextSubpanel({
   const { control } = useForm({
     defaultValues: {
       where: '',
-      whereLanguage: originalLanguage ?? ('lucene' as 'lucene' | 'sql'),
+      whereLanguage:
+        originalLanguage ??
+        getStoredLanguage() ??
+        ('lucene' as 'lucene' | 'sql'),
     },
   });
 

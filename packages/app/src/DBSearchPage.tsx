@@ -81,7 +81,9 @@ import { DBTimeChart } from '@/components/DBTimeChart';
 import { ErrorBoundary } from '@/components/Error/ErrorBoundary';
 import { InputControlled } from '@/components/InputControlled';
 import OnboardingModal from '@/components/OnboardingModal';
-import SearchWhereInput from '@/components/SearchInput/SearchWhereInput';
+import SearchWhereInput, {
+  getStoredLanguage,
+} from '@/components/SearchInput/SearchWhereInput';
 import { SQLInlineEditorControlled } from '@/components/SearchInput/SQLInlineEditor';
 import SearchPageActionBar from '@/components/SearchPageActionBar';
 import SearchTotalCountChart from '@/components/SearchTotalCountChart';
@@ -413,7 +415,8 @@ function SaveSearchModalComponent({
             name,
             select: searchedConfig.select ?? '',
             where: searchedConfig.where ?? '',
-            whereLanguage: searchedConfig.whereLanguage ?? 'lucene',
+            whereLanguage:
+              searchedConfig.whereLanguage ?? getStoredLanguage() ?? 'lucene',
             source: searchedConfig.source ?? '',
             orderBy: searchedConfig.orderBy ?? '',
             filters: searchedConfig.filters ?? [],
@@ -431,7 +434,8 @@ function SaveSearchModalComponent({
             name,
             select: searchedConfig.select ?? '',
             where: searchedConfig.where ?? '',
-            whereLanguage: searchedConfig.whereLanguage ?? 'lucene',
+            whereLanguage:
+              searchedConfig.whereLanguage ?? getStoredLanguage() ?? 'lucene',
             source: searchedConfig.source ?? '',
             orderBy: searchedConfig.orderBy ?? '',
             filters: searchedConfig.filters ?? [],
@@ -879,7 +883,8 @@ function DBSearchPage() {
     values: {
       select: searchedConfig.select || '',
       where: searchedConfig.where || '',
-      whereLanguage: searchedConfig.whereLanguage ?? 'lucene',
+      whereLanguage:
+        searchedConfig.whereLanguage ?? getStoredLanguage() ?? 'lucene',
       source: searchedConfig.source || defaultSourceId,
       filters: searchedConfig.filters ?? [],
       orderBy: searchedConfig.orderBy ?? '',
@@ -942,7 +947,8 @@ function DBSearchPage() {
       reset({
         select: searchedConfig?.select ?? '',
         where: searchedConfig?.where ?? '',
-        whereLanguage: searchedConfig?.whereLanguage ?? 'lucene',
+        whereLanguage:
+          searchedConfig?.whereLanguage ?? getStoredLanguage() ?? 'lucene',
         source: searchedConfig?.source ?? undefined,
         filters: searchedConfig?.filters ?? [],
         orderBy: searchedConfig?.orderBy ?? '',
@@ -980,7 +986,7 @@ function DBSearchPage() {
         source: defaultSourceId,
         where: '',
         select: '',
-        whereLanguage: 'lucene',
+        whereLanguage: getStoredLanguage() ?? 'lucene',
         filters: [],
         orderBy: '',
       });
@@ -1171,7 +1177,8 @@ function DBSearchPage() {
             name: savedSearch.name,
             select: searchedConfig.select ?? '',
             where: searchedConfig.where ?? '',
-            whereLanguage: searchedConfig.whereLanguage ?? 'lucene',
+            whereLanguage:
+              searchedConfig.whereLanguage ?? getStoredLanguage() ?? 'lucene',
             source: searchedConfig.source ?? '',
             orderBy: searchedConfig.orderBy ?? '',
             filters: searchedConfig.filters ?? [],

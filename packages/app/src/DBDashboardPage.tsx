@@ -80,7 +80,9 @@ import {
 import ChartContainer from './components/charts/ChartContainer';
 import DBSqlRowTableWithSideBar from './components/DBSqlRowTableWithSidebar';
 import OnboardingModal from './components/OnboardingModal';
-import SearchWhereInput from './components/SearchInput/SearchWhereInput';
+import SearchWhereInput, {
+  getStoredLanguage,
+} from './components/SearchInput/SearchWhereInput';
 import { Tags } from './components/Tags';
 import useDashboardFilters from './hooks/useDashboardFilters';
 import { useDashboardRefresh } from './hooks/useDashboardRefresh';
@@ -695,7 +697,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
   );
   const [whereLanguage, setWhereLanguage] = useQueryState(
     'whereLanguage',
-    parseAsString.withDefault('lucene'),
+    parseAsString.withDefault(getStoredLanguage() ?? 'lucene'),
   );
 
   const [showFiltersModal, setShowFiltersModal] = useState(false);
@@ -739,7 +741,10 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
     defaultValues: {
       granularity: granularity ?? 'auto',
       where: where ?? '',
-      whereLanguage: (whereLanguage as SearchConditionLanguage) ?? 'lucene',
+      whereLanguage:
+        (whereLanguage as SearchConditionLanguage) ??
+        getStoredLanguage() ??
+        'lucene',
     },
   });
 
