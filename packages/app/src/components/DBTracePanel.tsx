@@ -21,6 +21,7 @@ import { useSource, useUpdateSource } from '@/source';
 import TabBar from '@/TabBar';
 import { parseAsJsonEncoded } from '@/utils/queryParsers';
 
+import { RowDataPanel } from './DBRowDataPanel';
 import { RowOverviewPanel } from './DBRowOverviewPanel';
 import { SourceSelectControlled } from './SourceSelect';
 import { SQLInlineEditorControlled } from './SQLInlineEditor';
