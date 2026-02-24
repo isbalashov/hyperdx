@@ -223,7 +223,7 @@ export default function SQLInlineEditor({
   additionalSuggestions = [],
   queryHistoryType,
   parentRef,
-  allowMultiline = false,
+  allowMultiline = true,
 }: SQLInlineEditorProps & TableConnectionChoice) {
   const { colorScheme } = useMantineColorScheme();
   const _tableConnections = tableConnection
