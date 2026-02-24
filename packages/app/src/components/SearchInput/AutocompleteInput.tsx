@@ -165,13 +165,9 @@ export default function AutocompleteInput({
             ref={inputRef}
             placeholder={placeholder}
             className={cx(
-              'fs-8',
               styles.textarea,
               !isSearchInputFocused && styles.collapseFade,
               isSearchInputFocused && styles.focused,
-              isSearchInputFocused &&
-                isInputDropdownOpen &&
-                styles.dropdownOpen,
             )}
             value={value}
             size={size}

@@ -54,10 +54,12 @@
 .cmWrapper {
   min-width: 10px;
   width: 100%;
-  padding-top: 3px;
+  padding-top: 3.4px;
+  font-size: var(--mantine-font-size-sm);
 
   &.sizeXs {
-    padding-top: 0.5px;
+    padding-top: 1.5px;
+    font-size: var(--mantine-font-size-xs);
   }
 
   &.collapsed {

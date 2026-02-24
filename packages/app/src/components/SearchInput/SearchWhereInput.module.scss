@@ -29,7 +29,7 @@
     border-bottom: 2px solid var(--color-bg-brand);
 
     textarea {
-      min-height: 38px;
+      min-height: 38px !important;
     }
   }
 
@@ -47,10 +47,20 @@
     border-bottom-left-radius: 0;
 
     textarea {
-      min-height: 34px;
       border-radius: 0 var(--mantine-radius-default)
         var(--mantine-radius-default) 0;
     }
+  }
+
+  /* !important overrides the inline min-height set by react-textarea-autosize */
+  /* stylelint-disable-next-line selector-pseudo-class-no-unknown */
+  &.sizeXs :global(.mantine-InputWrapper-root) textarea {
+    min-height: 30px !important;
+  }
+
+  /* stylelint-disable-next-line selector-pseudo-class-no-unknown */
+  &.sizeSm :global(.mantine-InputWrapper-root) textarea {
+    min-height: 32px !important;
   }
 }
 
@@ -65,11 +75,11 @@
   background-color: var(--color-bg-field-addon);
 
   &.sizeXs {
-    height: 30px;
+    height: 32px;
   }
 
   &.sizeSm {
-    height: 36px;
+    height: 34px;
   }
 }
 

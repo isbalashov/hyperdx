@@ -163,12 +163,19 @@ export default function SearchWhereInput({
   };
 
   const tc = tableConnection ? { tableConnection } : { tableConnections };
+  const sizeClass = size === 'xs' ? styles.sizeXs : styles.sizeSm;
 
   return (
-    <Box className={styles.root} style={{ width, maxWidth }}>
+    <Box
+      className={styles.root}
+      style={{
+        width,
+        maxWidth,
+      }}
+    >
       <Flex
         align="center"
-        className={`${styles.languageSwitch} ${size === 'xs' ? styles.sizeXs : styles.sizeSm}`}
+        className={`${styles.languageSwitch} ${sizeClass}`}
         data-testid="where-language-switch"
         onMouseDown={e => e.preventDefault()}
       >
@@ -177,7 +184,7 @@ export default function SearchWhereInput({
           onLanguageChange={handleLanguageChange}
         />
       </Flex>
-      <Box className={styles.inputWrapper}>
+      <Box className={`${styles.inputWrapper} ${sizeClass}`}>
         {isSql ? (
           <SQLInlineEditorControlled
             {...tc}

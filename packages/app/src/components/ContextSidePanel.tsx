@@ -256,9 +256,17 @@ export default function ContextSubpanel({
     <>
       {config && (
         <Flex direction="column" mih="0px" style={{ flexGrow: 1 }}>
-          <Group justify="space-between" p="sm">
+          <Group
+            wrap="nowrap"
+            gap="xs"
+            p="sm"
+            justify={
+              contextBy === ContextBy.Custom ? undefined : 'space-between'
+            }
+          >
             <SegmentedControl
               size="xs"
+              style={{ flexShrink: 0 }}
               data={generateSegmentedControlData()}
               value={contextBy}
               onChange={v => setContextBy(v as ContextBy)}
@@ -269,11 +277,12 @@ export default function ContextSubpanel({
                 control={control}
                 name="where"
                 enableHotkey
-                size="sm"
+                size="xs"
               />
             )}
             <SegmentedControl
               size="xs"
+              style={{ flexShrink: 0 }}
               data={[
                 { label: '100ms', value: ms('100ms').toString() },
                 { label: '500ms', value: ms('500ms').toString() },
