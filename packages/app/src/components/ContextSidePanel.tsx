@@ -266,7 +266,6 @@ export default function ContextSubpanel({
           >
             <SegmentedControl
               size="xs"
-              style={{ flexShrink: 0 }}
               data={generateSegmentedControlData()}
               value={contextBy}
               onChange={v => setContextBy(v as ContextBy)}
@@ -282,7 +281,6 @@ export default function ContextSubpanel({
             )}
             <SegmentedControl
               size="xs"
-              style={{ flexShrink: 0 }}
               data={[
                 { label: '100ms', value: ms('100ms').toString() },
                 { label: '500ms', value: ms('500ms').toString() },
