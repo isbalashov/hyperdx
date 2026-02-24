@@ -1,6 +1,7 @@
 .root {
   position: relative;
   flex: 1;
+  min-height: var(--autocomplete-base-height, 36px);
 }
 
 .textarea {

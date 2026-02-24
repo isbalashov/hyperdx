@@ -5,7 +5,7 @@ import {
   ChartConfigWithDateRange,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
-import { Group, Select } from '@mantine/core';
+import { Box, Group, Select } from '@mantine/core';
 
 import SearchInputV2 from '@/components/SearchInput/SearchInputV2';
 import { useGetKeyValues } from '@/hooks/useMetadata';
@@ -253,16 +253,18 @@ export const KubernetesFilters: React.FC<KubernetesFiltersProps> = ({
         chartConfig={chartConfig}
         dataTestId="cluster-filter-select"
       />
-      <SearchInputV2
-        tableConnection={tcFromSource(metricSource)}
-        placeholder="Search query"
-        language="lucene"
-        name="searchQuery"
-        control={control}
-        size="xs"
-        enableHotkey
-        data-testid="k8s-search-input"
-      />
+      <Box style={{ flex: 1, minWidth: 200 }}>
+        <SearchInputV2
+          tableConnection={tcFromSource(metricSource)}
+          placeholder="Search query"
+          language="lucene"
+          name="searchQuery"
+          control={control}
+          size="xs"
+          enableHotkey
+          data-testid="k8s-search-input"
+        />
+      </Box>
     </Group>
   );
 };

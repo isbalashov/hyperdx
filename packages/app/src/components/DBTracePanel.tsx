@@ -155,13 +155,14 @@ export default function DBTracePanel({
       {(showTraceIdInput || !traceId) && parentSourceId != null && (
         <Stack gap="xs">
           <Text size="xs">Trace ID Expression</Text>
-          <Flex>
+          <Flex align="center">
             <SQLInlineEditorControlled
               tableConnection={tcFromSource(parentSourceData)}
               name="traceIdExpression"
               placeholder="Log Trace ID Column (ex. trace_id)"
               control={traceIdControl}
               size="xs"
+              parentRef={typeof document !== 'undefined' ? document.body : null}
             />
             <Button
               ms="sm"

@@ -1173,6 +1173,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
       <Flex
         gap="sm"
         mt="sm"
+        wrap="wrap"
         component="form"
         onSubmit={e => {
           e.preventDefault();
@@ -1190,6 +1191,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
           label="GLOBAL WHERE"
           enableHotkey
           allowMultiline
+          minWidth={300}
           data-testid="search-input"
         />
         <TimePicker

@@ -91,6 +91,10 @@ export type SearchWhereInputProps = {
    */
   maxWidth?: string | number;
   /**
+   * Min width style for the wrapper Box (useful in wrapping flex containers)
+   */
+  minWidth?: string | number;
+  /**
    * Test ID for the input
    */
   'data-testid'?: string;
@@ -144,6 +148,7 @@ export default function SearchWhereInput({
   lucenePlaceholder = 'Search your events w/ Lucene ex. column:foo',
   width = '100%',
   maxWidth = '100%',
+  minWidth,
   'data-testid': dataTestId,
   additionalSuggestions,
   languageName = `${name}Language`,
@@ -171,6 +176,7 @@ export default function SearchWhereInput({
       style={{
         width,
         maxWidth,
+        minWidth,
       }}
     >
       <Flex
