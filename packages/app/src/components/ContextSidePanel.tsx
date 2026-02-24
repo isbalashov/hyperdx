@@ -256,14 +256,7 @@ export default function ContextSubpanel({
     <>
       {config && (
         <Flex direction="column" mih="0px" style={{ flexGrow: 1 }}>
-          <Group
-            wrap="nowrap"
-            gap="xs"
-            p="sm"
-            justify={
-              contextBy === ContextBy.Custom ? undefined : 'space-between'
-            }
-          >
+          <Group justify="space-between" p="sm">
             <SegmentedControl
               size="xs"
               data={generateSegmentedControlData()}
