@@ -256,7 +256,7 @@ export const KubernetesFilters: React.FC<KubernetesFiltersProps> = ({
       <Box style={{ flex: 1, minWidth: 200 }}>
         <SearchInputV2
           tableConnection={tcFromSource(metricSource)}
-          placeholder="Search query"
+          placeholder="Search your events w/ Lucene ex. column:foo"
           language="lucene"
           name="searchQuery"
           control={control}
