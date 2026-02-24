@@ -60,7 +60,7 @@
 
   /* stylelint-disable-next-line selector-pseudo-class-no-unknown */
   &.sizeSm :global(.mantine-InputWrapper-root) textarea {
-    min-height: 32px !important;
+    min-height: 34px !important;
   }
 }
 
@@ -79,7 +79,7 @@
   }
 
   &.sizeSm {
-    height: 34px;
+    height: 36px;
   }
 }
 
