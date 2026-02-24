@@ -45,6 +45,13 @@ dev-int:
 	npx nx run @hyperdx/api:dev:int $(FILE)
 	docker compose -p int -f ./docker-compose.ci.yml down
 
+.PHONY: debug-int-api
+debug-int-api:
+	docker compose -p int -f ./docker-compose.ci.yml up -d
+	npx nx run @hyperdx/api:debug:int $(FILE)
+	docker compose -p int -f ./docker-compose.ci.yml down
+
+
 .PHONY: dev-int-common-utils
 dev-int-common-utils:
 	docker compose -p int -f ./docker-compose.ci.yml up -d
