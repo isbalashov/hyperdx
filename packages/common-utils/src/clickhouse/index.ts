@@ -522,6 +522,7 @@ export abstract class BaseClickhouseClient {
       date_time_output_format: 'iso',
       wait_end_of_query: 0,
       cancel_http_readonly_queries_on_client_close: 1,
+      output_format_json_quote_64bit_integers: 1,
     };
 
     const metadata = getMetadata(this);
