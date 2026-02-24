@@ -50,6 +50,8 @@ export function useNestedPanelState(isNested?: boolean) {
   // Query state (URL-based) for root level
   const queryState = {
     contextRowId: useQueryState('contextRowId', parseAsStringEncoded),
+    // Source IDs are MongoDB ObjectIDs (hex strings) and contain no special
+    // characters, so no encoding is needed here.
     contextRowSource: useQueryState('contextRowSource'),
   };
 

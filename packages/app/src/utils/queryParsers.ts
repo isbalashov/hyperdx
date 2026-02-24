@@ -44,15 +44,24 @@ export const parseAsStringEncoded = createParser<string>({
 export function parseAsJsonEncoded<T>() {
   return createParser<T>({
     parse: value => {
+      let decoded: string;
       try {
-        return JSON.parse(decodeURIComponent(value));
+        decoded = decodeURIComponent(value);
       } catch {
-        // Fallback for old-format URLs where the value is already plain JSON.
+        // Malformed URI sequence — value is likely old-format plain JSON.
         try {
           return JSON.parse(value);
         } catch {
           return null;
         }
+      }
+      // URI decoded successfully; parse the decoded string as JSON.
+      // This handles both new-format (double-encoded) and old-format URLs,
+      // since decodeURIComponent is a no-op on plain JSON strings.
+      try {
+        return JSON.parse(decoded);
+      } catch {
+        return null;
       }
     },
     serialize: value => encodeURIComponent(JSON.stringify(value)),

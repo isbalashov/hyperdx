@@ -5,10 +5,12 @@ import { DashboardFilter, Filter } from '@hyperdx/common-utils/dist/types';
 import { FilterState, filtersToQuery, parseQuery } from '@/searchFilters';
 import { parseAsJsonEncoded } from '@/utils/queryParsers';
 
+const filterQueriesParser = parseAsJsonEncoded<Filter[]>();
+
 const useDashboardFilters = (filters: DashboardFilter[]) => {
   const [filterQueries, setFilterQueries] = useQueryState(
     'filters',
-    parseAsJsonEncoded<Filter[]>(),
+    filterQueriesParser,
   );
 
   const setFilterValue = useCallback(
