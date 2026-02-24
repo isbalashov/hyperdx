@@ -75,7 +75,7 @@ test.describe('Multiline Input', { tag: '@search' }, () => {
       path: '/dashboards',
       name: 'Dashboard Page',
       formSelector: undefined,
-      whereText: 'GLOBAL WHERE',
+      whereText: 'WHERE',
     },
   ];
 
