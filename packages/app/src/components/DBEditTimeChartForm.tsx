@@ -78,7 +78,9 @@ import { AlertChannelForm, getAlertReferenceLines } from '@/components/Alerts';
 import ChartSQLPreview from '@/components/ChartSQLPreview';
 import DBTableChart from '@/components/DBTableChart';
 import { DBTimeChart } from '@/components/DBTimeChart';
-import SearchWhereInput from '@/components/SearchInput/SearchWhereInput';
+import SearchWhereInput, {
+  getStoredLanguage,
+} from '@/components/SearchInput/SearchWhereInput';
 import { SQLInlineEditorControlled } from '@/components/SearchInput/SQLInlineEditor';
 import { TimePicker } from '@/components/TimePicker';
 import { IS_LOCAL_MODE } from '@/config';
@@ -581,7 +583,13 @@ export default function EditTimeChartForm({
   const configWithSeries: SavedChartConfigWithSeries = useMemo(
     () => ({
       ...chartConfig,
-      series: Array.isArray(chartConfig.select) ? chartConfig.select : [],
+      series: Array.isArray(chartConfig.select)
+        ? chartConfig.select.map(s => ({
+            ...s,
+            aggConditionLanguage:
+              s.aggConditionLanguage ?? getStoredLanguage() ?? 'lucene',
+          }))
+        : [],
     }),
     [chartConfig],
   );
@@ -856,7 +864,7 @@ export default function EditTimeChartForm({
           {
             aggFn: 'count',
             aggCondition: '',
-            aggConditionLanguage: 'lucene',
+            aggConditionLanguage: getStoredLanguage() ?? 'lucene',
             valueExpression: '',
           },
         ];
@@ -1205,7 +1213,8 @@ export default function EditTimeChartForm({
                           append({
                             aggFn: 'count',
                             aggCondition: '',
-                            aggConditionLanguage: 'lucene',
+                            aggConditionLanguage:
+                              getStoredLanguage() ?? 'lucene',
                             valueExpression: '',
                           });
                         }}

@@ -117,6 +117,10 @@ const ReactGridLayout = WidthProvider(RGL);
 // TODO: This is a hack to set the default time range
 const defaultTimeRange = parseTimeQuery('Past 1h', false) as [Date, Date];
 
+const whereLanguageParser = parseAsString.withDefault(
+  typeof window !== 'undefined' ? (getStoredLanguage() ?? 'lucene') : 'lucene',
+);
+
 const Tile = forwardRef(
   (
     {
@@ -732,7 +736,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
   );
   const [whereLanguage, setWhereLanguage] = useQueryState(
     'whereLanguage',
-    parseAsString.withDefault(getStoredLanguage() ?? 'lucene'),
+    whereLanguageParser,
   );
 
   const [showFiltersModal, setShowFiltersModal] = useState(false);

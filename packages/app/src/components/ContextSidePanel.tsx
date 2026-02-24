@@ -11,10 +11,9 @@ import {
 import { Badge, Flex, Group, SegmentedControl } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 
-import SearchInputV2 from '@/components/SearchInput/SearchInputV2';
-import { getStoredLanguage } from '@/components/SearchInput/SearchWhereInput';
-import { SQLInlineEditorControlled } from '@/components/SearchInput/SQLInlineEditor';
-import WhereLanguageControlled from '@/components/WhereLanguageControlled';
+import SearchWhereInput, {
+  getStoredLanguage,
+} from '@/components/SearchInput/SearchWhereInput';
 import { RowWhereResult, WithClause } from '@/hooks/useRowWhere';
 import { useSource } from '@/source';
 import { formatAttributeClause } from '@/utils';
@@ -265,35 +264,12 @@ export default function ContextSubpanel({
               onChange={v => setContextBy(v as ContextBy)}
             />
             {contextBy === ContextBy.Custom && (
-              <WhereLanguageControlled
-                name="whereLanguage"
+              <SearchWhereInput
+                tableConnection={tcFromSource(source)}
                 control={control}
-                sqlInput={
-                  originalLanguage === 'lucene' ? null : (
-                    <SQLInlineEditorControlled
-                      tableConnection={tcFromSource(source)}
-                      control={control}
-                      name="where"
-                      placeholder="SQL WHERE clause (ex. column = 'foo')"
-                      language="sql"
-                      enableHotkey
-                      size="sm"
-                    />
-                  )
-                }
-                luceneInput={
-                  originalLanguage === 'sql' ? null : (
-                    <SearchInputV2
-                      tableConnection={tcFromSource(source)}
-                      control={control}
-                      name="where"
-                      language="lucene"
-                      placeholder="Lucene where clause (ex. column:value)"
-                      enableHotkey
-                      size="sm"
-                    />
-                  )
-                }
+                name="where"
+                enableHotkey
+                size="sm"
               />
             )}
             <SegmentedControl

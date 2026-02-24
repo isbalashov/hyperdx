@@ -1420,6 +1420,8 @@ function ServicesDashboardPage() {
     };
   }, [appliedConfigParams, sources]);
 
+  // Services dashboard is SQL-first (WHERE filters are applied to metric/SQL queries).
+  // Default to 'sql' here; Search and Dashboard pages default to 'lucene'.
   const effectiveWhereLanguage =
     appliedConfigWithoutFilters?.whereLanguage ?? getStoredLanguage() ?? 'sql';
 
