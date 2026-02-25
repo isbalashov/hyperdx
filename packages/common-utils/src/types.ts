@@ -250,22 +250,21 @@ export enum WebhookService {
   IncidentIO = 'incidentio',
 }
 
-// Base webhook interface (matches backend IWebhook but with JSON-serialized types)
-export interface IWebhook {
-  _id: string;
-  createdAt: string;
-  name: string;
-  service: WebhookService;
-  updatedAt: string;
-  url?: string;
-  description?: string;
-  queryParams?: Record<string, string>;
-  headers?: Record<string, string>;
-  body?: string;
-}
+export const webhookSchema = z.object({
+  _id: z.string(),
+  createdAt: z.string(),
+  name: z.string(),
+  service: z.nativeEnum(WebhookService),
+  updatedAt: z.string(),
+  url: z.string().optional(),
+  description: z.string().optional(),
+  queryParams: z.record(z.string(), z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  body: z.string().optional(),
+});
 
 // Webhook API response type (excludes team field for security)
-export type WebhookApiData = Omit<IWebhook, 'team'>;
+export type WebhookApiData = z.infer<typeof webhookSchema>;
 
 // -------------------------
 // ALERTS
