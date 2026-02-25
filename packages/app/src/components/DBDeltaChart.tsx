@@ -3,6 +3,7 @@ import { withErrorBoundary } from 'react-error-boundary';
 import {
   Bar,
   BarChart,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -353,36 +354,15 @@ export type AddFilterFn = (
   action?: 'only' | 'exclude' | 'include',
 ) => void;
 
+// Hover-only tooltip: shows value name and percentages, no action buttons.
+// Actions are handled by the click popover in PropertyComparisonChart.
 const HDXBarChartTooltip = withErrorBoundary(
   memo((props: any) => {
-    const {
-      active,
-      payload,
-      label,
-      title,
-      onAddFilter,
-      onMouseEnter,
-      onMouseLeave,
-    } = props;
-    const [isCopied, setIsCopied] = useState(false);
+    const { active, payload, label, title } = props;
 
     if (active && payload && payload.length) {
-      const copyValue = async () => {
-        try {
-          await navigator.clipboard.writeText(String(label ?? ''));
-          setIsCopied(true);
-          setTimeout(() => setIsCopied(false), 2000);
-        } catch (e) {
-          console.error('Failed to copy:', e);
-        }
-      };
-
       return (
-        <div
-          className={styles.chartTooltip}
-          onMouseEnter={onMouseEnter}
-          onMouseLeave={onMouseLeave}
-        >
+        <div className={styles.chartTooltip}>
           <div className={styles.chartTooltipContent}>
             {title && (
               <Text size="xs" mb="xs">
@@ -390,7 +370,7 @@ const HDXBarChartTooltip = withErrorBoundary(
               </Text>
             )}
             <Text size="xs" mb="xs">
-              {label.length === 0 ? <i>Empty String</i> : label}
+              {String(label).length === 0 ? <i>Empty String</i> : String(label)}
             </Text>
             {payload
               .sort((a: any, b: any) => b.value - a.value)
@@ -399,59 +379,6 @@ const HDXBarChartTooltip = withErrorBoundary(
                   {p.name}: {p.value.toFixed(2)}%
                 </div>
               ))}
-            <Flex gap={4} mt={6}>
-              <MantineTooltip
-                label={isCopied ? 'Copied!' : 'Copy value'}
-                position="top"
-                withArrow
-                fz="xs"
-              >
-                <ActionIcon
-                  variant="subtle"
-                  size="xs"
-                  onClick={copyValue}
-                  color={isCopied ? 'green' : undefined}
-                >
-                  {isCopied ? <IconCheck size={12} /> : <IconCopy size={12} />}
-                </ActionIcon>
-              </MantineTooltip>
-              {onAddFilter && (
-                <>
-                  <MantineTooltip
-                    label="Filter for this value"
-                    position="top"
-                    withArrow
-                    fz="xs"
-                  >
-                    <ActionIcon
-                      variant="subtle"
-                      size="xs"
-                      onClick={() =>
-                        onAddFilter(title, String(label ?? ''), 'include')
-                      }
-                    >
-                      <IconFilter size={12} />
-                    </ActionIcon>
-                  </MantineTooltip>
-                  <MantineTooltip
-                    label="Exclude this value"
-                    position="top"
-                    withArrow
-                    fz="xs"
-                  >
-                    <ActionIcon
-                      variant="subtle"
-                      size="xs"
-                      onClick={() =>
-                        onAddFilter(title, String(label ?? ''), 'exclude')
-                      }
-                    >
-                      <IconFilterX size={12} />
-                    </ActionIcon>
-                  </MantineTooltip>
-                </>
-              )}
-            </Flex>
           </div>
         </div>
       );
@@ -468,6 +395,67 @@ const HDXBarChartTooltip = withErrorBoundary(
   },
 );
 
+// Custom XAxis tick that truncates long labels and adds a native SVG tooltip.
+function TruncatedTick({ x, y, payload }: any) {
+  const value = String(payload?.value ?? '');
+  const MAX_CHARS = 12;
+  const displayValue =
+    value.length > MAX_CHARS ? value.slice(0, MAX_CHARS) + '…' : value;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{value}</title>
+      <text
+        x={0}
+        y={0}
+        dy={12}
+        textAnchor="middle"
+        fontSize={10}
+        fontFamily="IBM Plex Mono, monospace"
+      >
+        {displayValue}
+      </text>
+    </g>
+  );
+}
+
+// When a field has more than this many distinct values, the remaining values
+// are collapsed into a single "Other (N)" bucket shown in neutral gray.
+export const MAX_CHART_VALUES = 6;
+
+// Aggregates chart data beyond MAX_CHART_VALUES into a single "Other (N)" entry.
+// Sorts by combined count (outlier + inlier) descending so the most frequent
+// values are kept. Returns data unchanged if already within the limit.
+export function applyTopNAggregation(
+  data: { name: string; outlierCount: number; inlierCount: number }[],
+): {
+  name: string;
+  outlierCount: number;
+  inlierCount: number;
+  isOther?: boolean;
+}[] {
+  if (data.length <= MAX_CHART_VALUES) return data;
+
+  const sorted = [...data].sort(
+    (a, b) =>
+      b.outlierCount + b.inlierCount - (a.outlierCount + a.inlierCount),
+  );
+  const top = sorted.slice(0, MAX_CHART_VALUES);
+  const rest = sorted.slice(MAX_CHART_VALUES);
+
+  const otherOutlierCount = rest.reduce((sum, item) => sum + item.outlierCount, 0);
+  const otherInlierCount = rest.reduce((sum, item) => sum + item.inlierCount, 0);
+
+  return [
+    ...top,
+    {
+      name: `Other (${rest.length})`,
+      outlierCount: otherOutlierCount,
+      inlierCount: otherInlierCount,
+      isOther: true,
+    },
+  ];
+}
+
 function PropertyComparisonChart({
   name,
   outlierValueOccurences,
@@ -483,51 +471,60 @@ function PropertyComparisonChart({
     outlierValueOccurences,
     inlierValueOccurences,
   );
+  const chartData = applyTopNAggregation(mergedValueStatistics);
 
-  // Controlled tooltip state - keeps tooltip open while hovering over action buttons
-  const [tooltipState, setTooltipState] = useState<{
-    active: boolean;
-    label: string;
-    payload: any[];
-  }>({ active: false, label: '', payload: [] });
-  const tooltipHideTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const [clickedBar, setClickedBar] = useState<{
+    value: string;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const [copiedValue, setCopiedValue] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const chartWrapperRef = useRef<HTMLDivElement>(null);
 
+  // Dismiss popover when clicking outside both the popover and the chart wrapper
   useEffect(() => {
-    return () => {
-      if (tooltipHideTimeoutRef.current) {
-        clearTimeout(tooltipHideTimeoutRef.current);
+    if (!clickedBar) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        chartWrapperRef.current &&
+        !chartWrapperRef.current.contains(e.target as Node)
+      ) {
+        setClickedBar(null);
       }
     };
-  }, []);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [clickedBar]);
 
-  const keepTooltipOpen = useCallback(() => {
-    if (tooltipHideTimeoutRef.current) {
-      clearTimeout(tooltipHideTimeoutRef.current);
+  // Dismiss popover on scroll (prevents stale popover when chart scrolls offscreen)
+  useEffect(() => {
+    if (!clickedBar) return;
+    const handleScroll = () => setClickedBar(null);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [clickedBar]);
+
+  const handleChartClick = useCallback((data: any, event: any) => {
+    if (!data?.activePayload?.length) {
+      setClickedBar(null);
+      return;
     }
+    if (data.activePayload[0]?.payload?.isOther) {
+      setClickedBar(null);
+      return;
+    }
+    setClickedBar({
+      value: String(data.activeLabel ?? ''),
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
   }, []);
-
-  const scheduleTooltipClose = useCallback(() => {
-    tooltipHideTimeoutRef.current = setTimeout(() => {
-      setTooltipState(prev => ({ ...prev, active: false }));
-    }, 150);
-  }, []);
-
-  const handleChartMouseMove = useCallback(
-    (state: any) => {
-      if (state.isTooltipActive) {
-        keepTooltipOpen();
-        setTooltipState({
-          active: true,
-          label: state.activeLabel ?? '',
-          payload: state.activePayload ?? [],
-        });
-      }
-    },
-    [keepTooltipOpen],
-  );
 
   return (
-    <div style={{ width: '100%', height: 120 }}>
+    <div ref={chartWrapperRef} style={{ width: '100%', height: 120 }}>
       <Text size="xs" ta="center" title={name}>
         {truncateMiddle(name, 32)}
       </Text>
@@ -536,37 +533,22 @@ function PropertyComparisonChart({
           barGap={2}
           width={500}
           height={300}
-          data={mergedValueStatistics}
+          data={chartData}
           margin={{
             top: 0,
             right: 0,
             left: 0,
             bottom: 0,
           }}
-          onMouseMove={handleChartMouseMove}
-          onMouseLeave={scheduleTooltipClose}
+          onClick={handleChartClick}
+          style={{ cursor: 'pointer' }}
         >
-          {/* <CartesianGrid strokeDasharray="3 3" /> */}
-          <XAxis
-            dataKey="name"
-            tick={{ fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }}
-          />
+          <XAxis dataKey="name" tick={<TruncatedTick />} />
           <YAxis
             tick={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
           />
           <Tooltip
-            active={tooltipState.active}
-            payload={tooltipState.payload}
-            label={tooltipState.label}
-            wrapperStyle={{ pointerEvents: 'auto', zIndex: 1000 }}
-            content={
-              <HDXBarChartTooltip
-                title={name}
-                onAddFilter={onAddFilter}
-                onMouseEnter={keepTooltipOpen}
-                onMouseLeave={scheduleTooltipClose}
-              />
-            }
+            content={<HDXBarChartTooltip title={name} />}
             allowEscapeViewBox={{ y: true }}
           />
           <Bar
@@ -574,15 +556,119 @@ function PropertyComparisonChart({
             name="Outliers"
             fill={getChartColorError()}
             isAnimationActive={false}
-          />
+          >
+            {chartData.map((entry, index) => (
+              <Cell
+                key={`out-${index}`}
+                fill={entry.isOther ? '#868e96' : getChartColorError()}
+              />
+            ))}
+          </Bar>
           <Bar
             dataKey="inlierCount"
             name="Inliers"
             fill={getChartColorSuccess()}
             isAnimationActive={false}
-          />
+          >
+            {chartData.map((entry, index) => (
+              <Cell
+                key={`in-${index}`}
+                fill={entry.isOther ? '#868e96' : getChartColorSuccess()}
+              />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
+      {clickedBar && (
+        <div
+          ref={popoverRef}
+          style={{
+            position: 'fixed',
+            left: clickedBar.clientX,
+            top: clickedBar.clientY - 8,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 1050,
+            background: 'var(--mantine-color-dark-7)',
+            border: '1px solid var(--mantine-color-dark-4)',
+            borderRadius: 4,
+            padding: '8px 12px',
+            minWidth: 180,
+            maxWidth: 300,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          }}
+        >
+          <Text size="xs" mb="xs" style={{ wordBreak: 'break-all' }}>
+            {clickedBar.value.length === 0 ? (
+              <i>Empty String</i>
+            ) : (
+              clickedBar.value
+            )}
+          </Text>
+          <Flex gap={4} align="center">
+            {onAddFilter && (
+              <>
+                <MantineTooltip
+                  label="Filter for this value"
+                  position="top"
+                  withArrow
+                  fz="xs"
+                >
+                  <ActionIcon
+                    variant="primary"
+                    size="xs"
+                    onClick={() => {
+                      onAddFilter(name, clickedBar.value, 'include');
+                      setClickedBar(null);
+                    }}
+                  >
+                    <IconFilter size={12} />
+                  </ActionIcon>
+                </MantineTooltip>
+                <MantineTooltip
+                  label="Exclude this value"
+                  position="top"
+                  withArrow
+                  fz="xs"
+                >
+                  <ActionIcon
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => {
+                      onAddFilter(name, clickedBar.value, 'exclude');
+                      setClickedBar(null);
+                    }}
+                  >
+                    <IconFilterX size={12} />
+                  </ActionIcon>
+                </MantineTooltip>
+              </>
+            )}
+            <MantineTooltip
+              label={copiedValue ? 'Copied!' : 'Copy value'}
+              position="top"
+              withArrow
+              fz="xs"
+            >
+              <ActionIcon
+                variant="secondary"
+                size="xs"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(clickedBar.value);
+                    setCopiedValue(true);
+                    setTimeout(() => setCopiedValue(false), 2000);
+                  } catch (e) {
+                    console.error('Failed to copy:', e);
+                  }
+                }}
+                color={copiedValue ? 'green' : undefined}
+              >
+                {copiedValue ? <IconCheck size={12} /> : <IconCopy size={12} />}
+              </ActionIcon>
+            </MantineTooltip>
+          </Flex>
+        </div>
+      )}
     </div>
   );
 }

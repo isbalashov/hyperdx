@@ -1,9 +1,11 @@
 import {
+  applyTopNAggregation,
   flattenedKeyToSqlExpression,
   isDenylisted,
   isHighCardinality,
   isIdField,
   isTimestampArrayField,
+  MAX_CHART_VALUES,
 } from '../DBDeltaChart';
 
 const traceColumnMeta = [
@@ -326,6 +328,81 @@ describe('isHighCardinality', () => {
         new Map(),
       ),
     ).toBe(false);
+  });
+});
+
+describe('applyTopNAggregation', () => {
+  const makeData = (names: string[]) =>
+    names.map((name, i) => ({
+      name,
+      outlierCount: 10 - i, // descending counts so order is deterministic
+      inlierCount: 5,
+    }));
+
+  it('returns data unchanged when at or below MAX_CHART_VALUES', () => {
+    const data = makeData(['a', 'b', 'c']);
+    expect(applyTopNAggregation(data)).toEqual(data);
+  });
+
+  it('returns data unchanged when exactly MAX_CHART_VALUES entries', () => {
+    const data = makeData(['a', 'b', 'c', 'd', 'e', 'f']);
+    expect(data.length).toBe(MAX_CHART_VALUES);
+    const result = applyTopNAggregation(data);
+    expect(result.length).toBe(MAX_CHART_VALUES);
+    expect(result.some(r => r.isOther)).toBe(false);
+  });
+
+  it('collapses values beyond MAX_CHART_VALUES into an Other bucket', () => {
+    const data = makeData(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+    const result = applyTopNAggregation(data);
+    expect(result.length).toBe(MAX_CHART_VALUES + 1);
+    const other = result[result.length - 1];
+    expect(other.isOther).toBe(true);
+    expect(other.name).toBe('Other (2)');
+  });
+
+  it('keeps top N entries by combined count', () => {
+    // 8 entries: first 6 have higher combined counts
+    const data = makeData(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+    const result = applyTopNAggregation(data);
+    const topNames = result.slice(0, MAX_CHART_VALUES).map(r => r.name);
+    expect(topNames).toContain('a');
+    expect(topNames).toContain('b');
+    expect(topNames).not.toContain('g');
+    expect(topNames).not.toContain('h');
+  });
+
+  it('Other bucket accumulates outlierCount and inlierCount from dropped values', () => {
+    const data = [
+      { name: 'a', outlierCount: 50, inlierCount: 50 },
+      { name: 'b', outlierCount: 40, inlierCount: 40 },
+      { name: 'c', outlierCount: 30, inlierCount: 30 },
+      { name: 'd', outlierCount: 20, inlierCount: 20 },
+      { name: 'e', outlierCount: 10, inlierCount: 10 },
+      { name: 'f', outlierCount: 5, inlierCount: 5 },
+      { name: 'g', outlierCount: 3, inlierCount: 2 }, // dropped
+      { name: 'h', outlierCount: 1, inlierCount: 1 }, // dropped
+    ];
+    const result = applyTopNAggregation(data);
+    const other = result.find(r => r.isOther);
+    expect(other).toBeDefined();
+    expect(other!.outlierCount).toBe(4); // 3 + 1
+    expect(other!.inlierCount).toBe(3); // 2 + 1
+  });
+
+  it('Other bucket name shows the count of aggregated values', () => {
+    const data = makeData(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
+    const result = applyTopNAggregation(data);
+    const other = result.find(r => r.isOther);
+    expect(other?.name).toBe('Other (3)');
+  });
+
+  it('non-Other entries do not have isOther set', () => {
+    const data = makeData(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
+    const result = applyTopNAggregation(data);
+    result.slice(0, MAX_CHART_VALUES).forEach(entry => {
+      expect(entry.isOther).toBeFalsy();
+    });
   });
 });
 
