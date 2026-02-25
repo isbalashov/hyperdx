@@ -45,6 +45,71 @@ import { SQLPreview } from './ChartSQLPreview';
 
 import styles from '../../styles/HDXLineChart.module.scss';
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripTypeWrappers(type: string): string {
+  let t = type.trim();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    if (t.startsWith('LowCardinality(') && t.endsWith(')')) {
+      t = t.slice('LowCardinality('.length, -1).trim();
+      changed = true;
+    } else if (t.startsWith('Nullable(') && t.endsWith(')')) {
+      t = t.slice('Nullable('.length, -1).trim();
+      changed = true;
+    }
+  }
+  return t;
+}
+
+/**
+ * Converts a flattened dot-notation property key (produced by flattenData())
+ * into a valid ClickHouse SQL expression for use in filter conditions.
+ *
+ * flattenData() uses JavaScript's object/array iteration, producing keys like:
+ *   "ResourceAttributes.service.name"     for Map(String, String) columns
+ *   "Events.Attributes[0].message.type"   for Array(Map(String, String)) columns
+ *
+ * These must be converted to bracket notation for ClickHouse Map access:
+ *   "ResourceAttributes['service.name']"
+ *   "Events.Attributes[1]['message.type']"  (note: 0-based JS → 1-based CH index)
+ */
+export function flattenedKeyToSqlExpression(
+  key: string,
+  columnMeta: { name: string; type: string }[],
+): string {
+  for (const col of columnMeta) {
+    const baseType = stripTypeWrappers(col.type);
+
+    if (baseType.startsWith('Map(')) {
+      // Simple Map column: "MapCol.some.key" → "MapCol['some.key']"
+      if (key.startsWith(col.name + '.')) {
+        const mapKey = key.slice(col.name.length + 1);
+        return `${col.name}['${mapKey}']`;
+      }
+    } else if (baseType.startsWith('Array(')) {
+      const innerType = stripTypeWrappers(baseType.slice('Array('.length, -1));
+      if (innerType.startsWith('Map(')) {
+        // Array(Map) column: "ColName[N].key" → "ColName[N+1]['key']"
+        // flattenData() uses 0-based JS indexing; ClickHouse SQL uses 1-based.
+        const pattern = new RegExp(
+          `^${escapeRegExp(col.name)}\\[(\\d+)\\]\\.(.+)$`,
+        );
+        const match = key.match(pattern);
+        if (match) {
+          const chIndex = parseInt(match[1]) + 1;
+          const mapKey = match[2];
+          return `${col.name}[${chIndex}]['${mapKey}']`;
+        }
+      }
+    }
+  }
+  return key;
+}
+
 /*
  * Response Data is like...
 {
@@ -640,6 +705,31 @@ export default function DBDeltaChart({
       };
     }, [outlierData?.data, inlierData?.data]);
 
+  // Build column metadata map from query results to enable correct SQL expression
+  // generation when converting flattened property keys to filter expressions.
+  const columnMeta = useMemo(
+    () =>
+      (outlierData?.meta ?? inlierData?.meta ?? []) as {
+        name: string;
+        type: string;
+      }[],
+    [outlierData?.meta, inlierData?.meta],
+  );
+
+  // Wrap onAddFilter to convert flattened dot-notation keys (from flattenData)
+  // into valid ClickHouse SQL expressions before passing to the filter handler.
+  const handleAddFilter = useCallback<NonNullable<AddFilterFn>>(
+    (property, value, action) => {
+      if (!onAddFilter) return;
+      onAddFilter(
+        flattenedKeyToSqlExpression(property, columnMeta),
+        value,
+        action,
+      );
+    },
+    [onAddFilter, columnMeta],
+  );
+
   const [activePage, setPage] = useState(1);
 
   const {
@@ -731,7 +821,7 @@ export default function DBDeltaChart({
               inlierValueOccurences={
                 inlierValueOccurences.get(property) ?? new Map()
               }
-              onAddFilter={onAddFilter}
+              onAddFilter={onAddFilter ? handleAddFilter : undefined}
               key={property}
             />
           ))}
