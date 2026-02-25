@@ -421,6 +421,9 @@ function TruncatedTick({ x, y, payload }: any) {
 // are collapsed into a single "Other (N)" bucket shown in neutral gray.
 export const MAX_CHART_VALUES = 6;
 
+// Color for the "All spans" distribution bar (no selection / comparison mode off)
+const ALL_SPANS_COLOR = '#339af0';
+
 // Aggregates chart data beyond MAX_CHART_VALUES into a single "Other (N)" entry.
 // Sorts by combined count (outlier + inlier) descending so the most frequent
 // values are kept. Returns data unchanged if already within the limit.
@@ -460,11 +463,13 @@ function PropertyComparisonChart({
   outlierValueOccurences,
   inlierValueOccurences,
   onAddFilter,
+  hasSelection,
 }: {
   name: string;
   outlierValueOccurences: Map<string, number>;
   inlierValueOccurences: Map<string, number>;
   onAddFilter?: AddFilterFn;
+  hasSelection: boolean;
 }) {
   const mergedValueStatistics = mergeValueStatisticsMaps(
     outlierValueOccurences,
@@ -564,30 +569,38 @@ function PropertyComparisonChart({
           />
           <Bar
             dataKey="outlierCount"
-            name="Outliers"
-            fill={getChartColorError()}
+            name={hasSelection ? 'Selection' : 'All spans'}
+            fill={hasSelection ? getChartColorError() : ALL_SPANS_COLOR}
             isAnimationActive={false}
           >
             {chartData.map((entry, index) => (
               <Cell
                 key={`out-${index}`}
-                fill={entry.isOther ? '#868e96' : getChartColorError()}
+                fill={
+                  entry.isOther
+                    ? '#868e96'
+                    : hasSelection
+                      ? getChartColorError()
+                      : ALL_SPANS_COLOR
+                }
               />
             ))}
           </Bar>
-          <Bar
-            dataKey="inlierCount"
-            name="Inliers"
-            fill={getChartColorSuccess()}
-            isAnimationActive={false}
-          >
-            {chartData.map((entry, index) => (
-              <Cell
-                key={`in-${index}`}
-                fill={entry.isOther ? '#868e96' : getChartColorSuccess()}
-              />
-            ))}
-          </Bar>
+          {hasSelection && (
+            <Bar
+              dataKey="inlierCount"
+              name="Background"
+              fill={getChartColorSuccess()}
+              isAnimationActive={false}
+            >
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={`in-${index}`}
+                  fill={entry.isOther ? '#868e96' : getChartColorSuccess()}
+                />
+              ))}
+            </Bar>
+          )}
         </BarChart>
       </ResponsiveContainer>
       {clickedBar &&
@@ -625,32 +638,30 @@ function PropertyComparisonChart({
                 clickedBar.value
               )}
             </Text>
-            {(() => {
-              const outlierCount =
-                outlierValueOccurences.get(clickedBar.value) ?? 0;
-              const inlierCount =
-                inlierValueOccurences.get(clickedBar.value) ?? 0;
-              const outlierPct =
-                totalOutliers > 0
-                  ? ((outlierCount / totalOutliers) * 100).toFixed(1)
-                  : null;
-              const inlierPct =
-                totalInliers > 0
-                  ? ((inlierCount / totalInliers) * 100).toFixed(1)
-                  : null;
-              return (
-                <Flex gap={12} mb={8}>
-                  <Text size="xs" c={getChartColorError()}>
-                    Outliers: {outlierCount}
-                    {outlierPct != null ? ` (${outlierPct}%)` : ''}
-                  </Text>
-                  <Text size="xs" c={getChartColorSuccess()}>
-                    Inliers: {inlierCount}
-                    {inlierPct != null ? ` (${inlierPct}%)` : ''}
-                  </Text>
-                </Flex>
-              );
-            })()}
+            {hasSelection ? (
+              <Flex gap={12} mb={8}>
+                <Text size="xs" c={getChartColorError()}>
+                  Selection:{' '}
+                  {(outlierValueOccurences.get(clickedBar.value) ?? 0).toFixed(
+                    1,
+                  )}
+                  %
+                </Text>
+                <Text size="xs" c={getChartColorSuccess()}>
+                  Background:{' '}
+                  {(inlierValueOccurences.get(clickedBar.value) ?? 0).toFixed(
+                    1,
+                  )}
+                  %
+                </Text>
+              </Flex>
+            ) : (
+              <Text size="xs" c="dimmed" mb={8}>
+                Distribution:{' '}
+                {(outlierValueOccurences.get(clickedBar.value) ?? 0).toFixed(1)}
+                %
+              </Text>
+            )}
             <Flex gap={4} align="center">
               {onAddFilter && (
                 <>
@@ -715,20 +726,29 @@ const PAGINATION_HEIGHT = 48;
 export default function DBDeltaChart({
   config,
   valueExpr,
-  xMin,
-  xMax,
-  yMin,
-  yMax,
+  xMin: rawXMin,
+  xMax: rawXMax,
+  yMin: rawYMin,
+  yMax: rawYMax,
   onAddFilter,
 }: {
   config: ChartConfigWithDateRange;
   valueExpr: string;
-  xMin: number;
-  xMax: number;
-  yMin: number;
-  yMax: number;
+  xMin?: number | null;
+  xMax?: number | null;
+  yMin?: number | null;
+  yMax?: number | null;
   onAddFilter?: AddFilterFn;
 }) {
+  const hasSelection =
+    rawXMin != null && rawXMax != null && rawYMin != null && rawYMax != null;
+  // Safe numeric defaults so query builders always get valid values
+  // (outlier/inlier queries are gated by enabled:hasSelection)
+  const xMin = rawXMin ?? 0;
+  const xMax = rawXMax ?? 0;
+  const yMin = rawYMin ?? 0;
+  const yMax = rawYMax ?? 0;
+
   // Determine if the value expression uses aggregate functions
   const isAggregate = isAggregateFunction(valueExpr);
 
@@ -865,23 +885,42 @@ export default function DBDeltaChart({
     ];
   };
 
-  const { data: outlierData, error } = useQueriedChartConfig({
-    ...config,
-    with: buildWithClauses(true),
-    select: '*',
-    filters: buildFilters(true),
-    orderBy: [{ ordering: 'DESC', valueExpression: 'rand()' }],
-    limit: { limit: 1000 },
-  });
+  const { data: outlierData, error: outlierError } = useQueriedChartConfig(
+    {
+      ...config,
+      with: buildWithClauses(true),
+      select: '*',
+      filters: buildFilters(true),
+      orderBy: [{ ordering: 'DESC', valueExpression: 'rand()' }],
+      limit: { limit: 1000 },
+    },
+    { enabled: hasSelection },
+  );
 
-  const { data: inlierData } = useQueriedChartConfig({
-    ...config,
-    with: buildWithClauses(false),
-    select: '*',
-    filters: buildFilters(false),
-    orderBy: [{ ordering: 'DESC', valueExpression: 'rand()' }],
-    limit: { limit: 1000 },
-  });
+  const { data: inlierData } = useQueriedChartConfig(
+    {
+      ...config,
+      with: buildWithClauses(false),
+      select: '*',
+      filters: buildFilters(false),
+      orderBy: [{ ordering: 'DESC', valueExpression: 'rand()' }],
+      limit: { limit: 1000 },
+    },
+    { enabled: hasSelection },
+  );
+
+  // When no selection exists, fetch all spans without any range filter
+  const { data: allSpansData, error: allSpansError } = useQueriedChartConfig(
+    {
+      ...config,
+      select: '*',
+      orderBy: [{ ordering: 'DESC', valueExpression: 'rand()' }],
+      limit: { limit: 1000 },
+    },
+    { enabled: !hasSelection },
+  );
+
+  const error = outlierError ?? allSpansError;
 
   // Compute column metadata, property statistics, sorted/visible/hidden property lists.
   // columnMeta is merged here (instead of a separate useMemo) so the denylist and
@@ -893,20 +932,32 @@ export default function DBDeltaChart({
     visibleProperties,
     hiddenProperties,
   } = useMemo(() => {
-    const columnMeta = (outlierData?.meta ?? inlierData?.meta ?? []) as {
+    const columnMeta = (
+      outlierData?.meta ??
+      inlierData?.meta ??
+      allSpansData?.meta ??
+      []
+    ) as {
       name: string;
       type: string;
     }[];
 
+    // When no selection: use allSpans as "outlier" data and empty for inliers.
+    // The sort will rank by frequency (delta = count - 0 = count).
+    const actualOutlierData = hasSelection
+      ? (outlierData?.data ?? [])
+      : (allSpansData?.data ?? []);
+    const actualInlierData = hasSelection ? (inlierData?.data ?? []) : [];
+
     const {
       percentageOccurences: outlierValueOccurences,
       propertyOccurences: outlierPropertyOccurences,
-    } = getPropertyStatistics(outlierData?.data ?? []);
+    } = getPropertyStatistics(actualOutlierData);
 
     const {
       percentageOccurences: inlierValueOccurences,
       propertyOccurences: inlierPropertyOccurences,
-    } = getPropertyStatistics(inlierData?.data ?? []);
+    } = getPropertyStatistics(actualInlierData);
 
     // Get all the unique keys from the outliers
     let uniqueKeys = new Set([...outlierValueOccurences.keys()]);
@@ -968,7 +1019,7 @@ export default function DBDeltaChart({
       visibleProperties,
       hiddenProperties,
     };
-  }, [outlierData, inlierData]);
+  }, [outlierData, inlierData, allSpansData, hasSelection]);
 
   // Wrap onAddFilter to convert flattened dot-notation keys (from flattenData)
   // into valid ClickHouse SQL expressions before passing to the filter handler.
@@ -1081,6 +1132,61 @@ export default function DBDeltaChart({
         flexDirection: 'column',
       }}
     >
+      {/* Legend */}
+      <Flex gap="md" align="center" mb="xs" wrap="wrap">
+        {hasSelection ? (
+          <>
+            <Flex align="center" gap={4}>
+              <Box
+                w={10}
+                h={10}
+                style={{
+                  background: getChartColorError(),
+                  borderRadius: 2,
+                  flexShrink: 0,
+                }}
+              />
+              <Text size="xs" c="dimmed">
+                Selection
+              </Text>
+            </Flex>
+            <Flex align="center" gap={4}>
+              <Box
+                w={10}
+                h={10}
+                style={{
+                  background: getChartColorSuccess(),
+                  borderRadius: 2,
+                  flexShrink: 0,
+                }}
+              />
+              <Text size="xs" c="dimmed">
+                Background
+              </Text>
+            </Flex>
+          </>
+        ) : (
+          <>
+            <Flex align="center" gap={4}>
+              <Box
+                w={10}
+                h={10}
+                style={{
+                  background: ALL_SPANS_COLOR,
+                  borderRadius: 2,
+                  flexShrink: 0,
+                }}
+              />
+              <Text size="xs" c="dimmed">
+                All spans
+              </Text>
+            </Flex>
+            <Text size="xs" c="dimmed" fs="italic">
+              Select an area on the chart above to enable comparisons
+            </Text>
+          </>
+        )}
+      </Flex>
       {/* Primary fields — own grid so empty trailing cells don't interact with divider */}
       {visibleOnPage.length > 0 && (
         <div
@@ -1100,6 +1206,7 @@ export default function DBDeltaChart({
                 inlierValueOccurences.get(property) ?? new Map()
               }
               onAddFilter={onAddFilter ? handleAddFilter : undefined}
+              hasSelection={hasSelection}
               key={property}
             />
           ))}
@@ -1137,6 +1244,7 @@ export default function DBDeltaChart({
                 inlierValueOccurences.get(key) ?? new Map()
               }
               onAddFilter={onAddFilter ? handleAddFilter : undefined}
+              hasSelection={hasSelection}
               key={key}
             />
           ))}

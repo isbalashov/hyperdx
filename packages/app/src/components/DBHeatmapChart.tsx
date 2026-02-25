@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { Plugin } from 'uplot';
 import uPlot from 'uplot';
@@ -287,7 +287,6 @@ function HeatmapContainer({
   title,
   toolbarPrefix,
   toolbarSuffix,
-  initialSelection,
 }: {
   config: HeatmapChartConfig;
   enabled?: boolean;
@@ -295,12 +294,6 @@ function HeatmapContainer({
   title?: React.ReactNode;
   toolbarPrefix?: React.ReactNode[];
   toolbarSuffix?: React.ReactNode[];
-  initialSelection?: {
-    xMin: number;
-    xMax: number;
-    yMin: number;
-    yMax: number;
-  } | null;
 }) {
   const dateRange = config.dateRange;
   const granularity = convertDateRangeToGranularityString(dateRange, 245);
@@ -562,7 +555,6 @@ function HeatmapContainer({
           data={[time, bucket, count]}
           numberFormat={config.numberFormat}
           onFilter={onFilter}
-          initialSelection={initialSelection}
         />
       )}
     </ChartContainer>
@@ -674,22 +666,11 @@ function Heatmap({
   data,
   numberFormat,
   onFilter,
-  initialSelection,
 }: {
   data: Mode2DataArray;
   numberFormat?: NumberFormat;
   onFilter?: (xMin: number, xMax: number, yMin: number, yMax: number) => void;
-  initialSelection?: {
-    xMin: number;
-    xMax: number;
-    yMin: number;
-    yMax: number;
-  } | null;
 }) {
-  const uplotRef = useRef<uPlot | null>(null);
-  // Incremented each time uPlot initializes, used to trigger the selection-restore effect
-  const [uplotInitCount, setUplotInitCount] = useState(0);
-
   const [selectingInfo, setSelectingInfo] = useState<
     | {
         // In pixel units
@@ -803,10 +784,6 @@ function Heatmap({
         }),
         {
           hooks: {
-            init: u => {
-              uplotRef.current = u;
-              setUplotInitCount(c => c + 1);
-            },
             setSelect: u => {
               // Calculate offset from parent so we can render tooltip
               // relative to the parent pixels
@@ -837,43 +814,6 @@ function Heatmap({
       ],
     };
   }, [width, height, tickFormatter]);
-
-  // Restore the persisted selection after uPlot initializes AND data has loaded.
-  // The uPlot `init` hook fires before data is available so scales aren't set yet —
-  // pixel conversion would return NaN/Infinity. We also depend on `data[0].length`
-  // so the effect re-runs once the heatmap data actually arrives.
-  const dataLength = data[0].length;
-  useEffect(() => {
-    const u = uplotRef.current;
-    if (!u || !initialSelection || dataLength < 2) return;
-    const { offsetLeft, offsetTop } = u.over;
-    // xMin/xMax are stored in seconds; uPlot x-axis is in milliseconds
-    const left = u.valToPos(initialSelection.xMin * 1000, 'x');
-    const right = u.valToPos(initialSelection.xMax * 1000, 'x');
-    // y-axis: higher value → smaller pixel position (inverted)
-    const top = u.valToPos(initialSelection.yMax, 'y');
-    const bottom = u.valToPos(initialSelection.yMin, 'y');
-    if (
-      !isFinite(left) ||
-      !isFinite(right) ||
-      !isFinite(top) ||
-      !isFinite(bottom) ||
-      right <= left ||
-      bottom <= top
-    )
-      return;
-    setSelectingInfo({
-      left: left + offsetLeft,
-      top: top + offsetTop,
-      width: right - left,
-      height: bottom - top,
-      xMin: initialSelection.xMin * 1000,
-      xMax: initialSelection.xMax * 1000,
-      yMin: initialSelection.yMin,
-      yMax: initialSelection.yMax,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uplotInitCount, dataLength]);
 
   return (
     <div

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { parseAsFloat, parseAsString, useQueryStates } from 'nuqs';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -12,11 +12,7 @@ import {
   DisplayType,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
-import { Box, Flex } from '@mantine/core';
-import { ActionIcon } from '@mantine/core';
-import { Paper } from '@mantine/core';
-import { Center } from '@mantine/core';
-import { Text } from '@mantine/core';
+import { ActionIcon, Box, Flex } from '@mantine/core';
 import { IconPlayerPlay } from '@tabler/icons-react';
 
 import { getDurationMsExpression } from '@/source';
@@ -51,6 +47,18 @@ export function DBSearchHeatmapChart({
     yMax: parseAsFloat,
   });
   const [container, setContainer] = useState<HTMLElement | null>(null);
+
+  // After applying a filter, clear the heatmap selection so the delta chart
+  // resets to "all spans" distribution mode instead of staying in comparison mode.
+  const handleAddFilterAndClearSelection = useCallback<
+    NonNullable<AddFilterFn>
+  >(
+    (property, value, action) => {
+      setFields({ xMin: null, xMax: null, yMin: null, yMax: null });
+      onAddFilter?.(property, value, action);
+    },
+    [onAddFilter, setFields],
+  );
 
   return (
     <Flex
@@ -98,7 +106,6 @@ export function DBSearchHeatmapChart({
           }}
           enabled={isReady}
           onFilter={(xMin, xMax, yMin, yMax) => {
-            // Simply store the coordinates - DBDeltaChart will handle the logic
             setFields({
               xMin,
               xMax,
@@ -106,47 +113,22 @@ export function DBSearchHeatmapChart({
               yMax,
             });
           }}
-          initialSelection={
-            fields.xMin != null &&
-            fields.xMax != null &&
-            fields.yMin != null &&
-            fields.yMax != null
-              ? {
-                  xMin: fields.xMin,
-                  xMax: fields.xMax,
-                  yMin: fields.yMin,
-                  yMax: fields.yMax,
-                }
-              : null
-          }
         />
       </div>
-      {fields.xMin != null &&
-      fields.xMax != null &&
-      fields.yMin != null &&
-      fields.yMax != null ? (
-        <DBDeltaChart
-          config={{
-            ...chartConfig,
-            with: undefined,
-          }}
-          valueExpr={fields.value}
-          xMin={fields.xMin}
-          xMax={fields.xMax}
-          yMin={fields.yMin}
-          yMax={fields.yMax}
-          onAddFilter={onAddFilter}
-        />
-      ) : (
-        <Paper shadow="xs" p="xl" h="100%">
-          <Center mih={100} h="100%">
-            <Text size="sm">
-              Please highlight an outlier range in the heatmap to view the delta
-              chart.
-            </Text>
-          </Center>
-        </Paper>
-      )}
+      <DBDeltaChart
+        config={{
+          ...chartConfig,
+          with: undefined,
+        }}
+        valueExpr={fields.value}
+        xMin={fields.xMin}
+        xMax={fields.xMax}
+        yMin={fields.yMin}
+        yMax={fields.yMax}
+        onAddFilter={
+          onAddFilter ? handleAddFilterAndClearSelection : undefined
+        }
+      />
     </Flex>
   );
 }
