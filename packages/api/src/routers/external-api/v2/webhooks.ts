@@ -1,16 +1,9 @@
-import { webhookSchema } from '@hyperdx/common-utils/dist/types';
 import express from 'express';
-import z from 'zod';
 
 import { WebhookDocument } from '@/models/webhook';
 import Webhook from '@/models/webhook';
 import logger from '@/utils/logger';
-
-const externalWebhookSchema = webhookSchema
-  .omit({ _id: true })
-  .extend({ id: z.string() });
-
-type ExternalWebhook = z.infer<typeof externalWebhookSchema>;
+import { ExternalWebhook, externalWebhookSchema } from '@/utils/zod';
 
 function formatExternalWebhook(
   webhook: WebhookDocument,
@@ -37,7 +30,7 @@ function formatExternalWebhook(
  * @openapi
  * components:
  *   schemas:
- *     Webhook:
+ *     SlackWebhook:
  *       type: object
  *       required:
  *         - id
@@ -54,26 +47,14 @@ function formatExternalWebhook(
  *           description: Webhook name
  *         service:
  *           type: string
- *           description: Webhook service
+ *           enum: [slack]
+ *           description: Webhook service type
  *         url:
  *           type: string
- *           description: Webhook Destination URL
+ *           description: Slack incoming webhook URL
  *         description:
  *           type: string
  *           description: Webhook description, shown in the UI
- *         queryParams:
- *           type: object
- *           additionalProperties:
- *             type: string
- *           description: Optional query parameters to include in the webhook request
- *         headers:
- *           type: object
- *           additionalProperties:
- *             type: string
- *           description: Optional headers to include in the webhook request
- *         body:
- *           type: string
- *           description: Optional request body template.
  *         updatedAt:
  *           type: string
  *           format: date-time
@@ -82,8 +63,95 @@ function formatExternalWebhook(
  *           type: string
  *           format: date-time
  *           description: Creation timestamp
+ *     IncidentIOWebhook:
+ *       type: object
+ *       required:
+ *         - id
+ *         - name
+ *         - service
+ *         - updatedAt
+ *         - createdAt
+ *       properties:
+ *         id:
+ *           type: string
+ *           description: Webhook ID
+ *         name:
+ *           type: string
+ *           description: Webhook name
+ *         service:
+ *           type: string
+ *           enum: [incidentio]
+ *           description: Webhook service type
+ *         url:
+ *           type: string
+ *           description: incident.io alert event HTTP source URL
+ *         description:
+ *           type: string
+ *           description: Webhook description, shown in the UI
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *           description: Last update timestamp
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *           description: Creation timestamp
+ *     GenericWebhook:
+ *       type: object
+ *       required:
+ *         - id
+ *         - name
+ *         - service
+ *         - updatedAt
+ *         - createdAt
+ *       properties:
+ *         id:
+ *           type: string
+ *           description: Webhook ID
+ *         name:
+ *           type: string
+ *           description: Webhook name
+ *         service:
+ *           type: string
+ *           enum: [generic]
+ *           description: Webhook service type
+ *         url:
+ *           type: string
+ *           description: Webhook destination URL
+ *         description:
+ *           type: string
+ *           description: Webhook description, shown in the UI
+ *         headers:
+ *           type: object
+ *           additionalProperties:
+ *             type: string
+ *           description: Optional headers to include in the webhook request
+ *         body:
+ *           type: string
+ *           description: Optional request body template
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *           description: Last update timestamp
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *           description: Creation timestamp
+ *     Webhook:
+ *       oneOf:
+ *         - $ref: '#/components/schemas/SlackWebhook'
+ *         - $ref: '#/components/schemas/IncidentIOWebhook'
+ *         - $ref: '#/components/schemas/GenericWebhook'
+ *       discriminator:
+ *         propertyName: service
+ *         mapping:
+ *           slack: '#/components/schemas/SlackWebhook'
+ *           incidentio: '#/components/schemas/IncidentIOWebhook'
+ *           generic: '#/components/schemas/GenericWebhook'
  *     WebhooksListResponse:
  *       type: object
+ *       required:
+ *         - data
  *       properties:
  *         data:
  *           type: array

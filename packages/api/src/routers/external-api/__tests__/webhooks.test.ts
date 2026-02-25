@@ -9,14 +9,27 @@ import Webhook from '../../../models/webhook';
 
 const WEBHOOKS_BASE_URL = '/api/v2/webhooks';
 
-const MOCK_WEBHOOK = {
-  name: 'Test Webhook',
+const MOCK_SLACK_WEBHOOK = {
+  name: 'Test Slack Webhook',
   service: WebhookService.Slack,
   url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX',
   description: 'Test webhook for Slack',
-  queryParams: { param1: 'value1' },
-  headers: { 'X-Custom-Header': 'Header Value' },
-  body: '{"text": "Test message"}',
+};
+
+const MOCK_INCIDENT_IO_WEBHOOK = {
+  name: 'Test IncidentIO Webhook',
+  service: WebhookService.IncidentIO,
+  url: 'https://api.incident.io/v2/alert_events/http/ZZZZZZZZ?token=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+  description: 'Test webhook for incident.io',
+};
+
+const MOCK_GENERIC_WEBHOOK = {
+  name: 'Test Generic Webhook',
+  service: WebhookService.Generic,
+  url: 'https://example.com/webhook',
+  description: 'Test generic webhook',
+  headers: { 'X-Custom-Header': 'Header Value', Authorization: 'Bearer token' },
+  body: '{"text": "{{title}} | {{body}} | {{link}}"}',
 };
 
 describe('External API v2 Webhooks', () => {
@@ -59,52 +72,111 @@ describe('External API v2 Webhooks', () => {
       expect(response.body).toEqual({ data: [] });
     });
 
-    it('should list webhooks for the authenticated team', async () => {
-      await Webhook.create({ ...MOCK_WEBHOOK, team: team._id });
+    it('should list a Slack webhook with only Slack-allowed fields', async () => {
+      await Webhook.create({ ...MOCK_SLACK_WEBHOOK, team: team._id });
 
       const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
 
       expect(response.body.data).toHaveLength(1);
       expect(response.body.data[0]).toMatchObject({
         id: expect.any(String),
-        name: MOCK_WEBHOOK.name,
-        service: MOCK_WEBHOOK.service,
-        url: MOCK_WEBHOOK.url,
-        description: MOCK_WEBHOOK.description,
-        queryParams: MOCK_WEBHOOK.queryParams,
-        headers: MOCK_WEBHOOK.headers,
-        body: MOCK_WEBHOOK.body,
+        name: MOCK_SLACK_WEBHOOK.name,
+        service: WebhookService.Slack,
+        url: MOCK_SLACK_WEBHOOK.url,
+        description: MOCK_SLACK_WEBHOOK.description,
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
       });
+      expect(response.body.data[0]).not.toHaveProperty('headers');
+      expect(response.body.data[0]).not.toHaveProperty('body');
     });
 
-    it('should return multiple webhooks', async () => {
-      await Webhook.create({ ...MOCK_WEBHOOK, team: team._id });
+    it('should strip headers and body stored on a Slack webhook', async () => {
       await Webhook.create({
-        ...MOCK_WEBHOOK,
-        name: 'Second Webhook',
-        service: WebhookService.Generic,
-        url: 'https://example.com/webhook',
+        ...MOCK_SLACK_WEBHOOK,
+        headers: { 'X-Secret': 'secret' },
+        body: '{"text": "hello"}',
         team: team._id,
       });
 
       const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
 
-      expect(response.body.data).toHaveLength(2);
-      const names = response.body.data.map(w => w.name);
-      expect(names).toContain('Test Webhook');
-      expect(names).toContain('Second Webhook');
+      expect(response.body.data[0]).not.toHaveProperty('headers');
+      expect(response.body.data[0]).not.toHaveProperty('body');
+    });
+
+    it('should list an IncidentIO webhook with only IncidentIO-allowed fields', async () => {
+      await Webhook.create({ ...MOCK_INCIDENT_IO_WEBHOOK, team: team._id });
+
+      const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
+
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0]).toMatchObject({
+        id: expect.any(String),
+        name: MOCK_INCIDENT_IO_WEBHOOK.name,
+        service: WebhookService.IncidentIO,
+        url: MOCK_INCIDENT_IO_WEBHOOK.url,
+        description: MOCK_INCIDENT_IO_WEBHOOK.description,
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      });
+      expect(response.body.data[0]).not.toHaveProperty('headers');
+      expect(response.body.data[0]).not.toHaveProperty('body');
+    });
+
+    it('should strip headers and body stored on an IncidentIO webhook', async () => {
+      await Webhook.create({
+        ...MOCK_INCIDENT_IO_WEBHOOK,
+        headers: { 'X-Secret': 'secret' },
+        body: '{"title": "{{title}}"}',
+        team: team._id,
+      });
+
+      const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
+
+      expect(response.body.data[0]).not.toHaveProperty('headers');
+      expect(response.body.data[0]).not.toHaveProperty('body');
+    });
+
+    it('should list a Generic webhook with headers and body', async () => {
+      await Webhook.create({ ...MOCK_GENERIC_WEBHOOK, team: team._id });
+
+      const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
+
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0]).toMatchObject({
+        id: expect.any(String),
+        name: MOCK_GENERIC_WEBHOOK.name,
+        service: WebhookService.Generic,
+        url: MOCK_GENERIC_WEBHOOK.url,
+        description: MOCK_GENERIC_WEBHOOK.description,
+        headers: MOCK_GENERIC_WEBHOOK.headers,
+        body: MOCK_GENERIC_WEBHOOK.body,
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      });
+    });
+
+    it('should return multiple webhooks of different service types', async () => {
+      await Webhook.create({ ...MOCK_SLACK_WEBHOOK, team: team._id });
+      await Webhook.create({ ...MOCK_INCIDENT_IO_WEBHOOK, team: team._id });
+      await Webhook.create({ ...MOCK_GENERIC_WEBHOOK, team: team._id });
+
+      const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
+
+      expect(response.body.data).toHaveLength(3);
+      const names = response.body.data.map((w: { name: string }) => w.name);
+      expect(names).toContain(MOCK_SLACK_WEBHOOK.name);
+      expect(names).toContain(MOCK_INCIDENT_IO_WEBHOOK.name);
+      expect(names).toContain(MOCK_GENERIC_WEBHOOK.name);
     });
 
     it('should not return webhooks belonging to another team', async () => {
-      // Create a webhook for the current team
-      await Webhook.create({ ...MOCK_WEBHOOK, team: team._id });
+      await Webhook.create({ ...MOCK_SLACK_WEBHOOK, team: team._id });
 
-      // Create a webhook directly in the DB for a different team
       const otherTeamId = new ObjectId();
       await Webhook.create({
-        ...MOCK_WEBHOOK,
+        ...MOCK_SLACK_WEBHOOK,
         name: 'Other Team Webhook',
         team: otherTeamId,
       });
@@ -112,12 +184,35 @@ describe('External API v2 Webhooks', () => {
       const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
 
       expect(response.body.data).toHaveLength(1);
-      expect(response.body.data[0].name).toBe(MOCK_WEBHOOK.name);
+      expect(response.body.data[0].name).toBe(MOCK_SLACK_WEBHOOK.name);
     });
 
-    it('should work with a minimal webhook (no optional fields)', async () => {
+    it('should work with a minimal Slack webhook (no optional fields)', async () => {
       await Webhook.create({
-        name: 'Minimal Webhook',
+        name: 'Minimal Slack Webhook',
+        service: WebhookService.Slack,
+        team: team._id,
+      });
+
+      const response = await authRequest('get', WEBHOOKS_BASE_URL).expect(200);
+
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0]).toMatchObject({
+        id: expect.any(String),
+        name: 'Minimal Slack Webhook',
+        service: WebhookService.Slack,
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      });
+      expect(response.body.data[0]).not.toHaveProperty('url');
+      expect(response.body.data[0]).not.toHaveProperty('description');
+      expect(response.body.data[0]).not.toHaveProperty('headers');
+      expect(response.body.data[0]).not.toHaveProperty('body');
+    });
+
+    it('should work with a minimal Generic webhook (no optional fields)', async () => {
+      await Webhook.create({
+        name: 'Minimal Generic Webhook',
         service: WebhookService.Generic,
         team: team._id,
       });
@@ -127,14 +222,13 @@ describe('External API v2 Webhooks', () => {
       expect(response.body.data).toHaveLength(1);
       expect(response.body.data[0]).toMatchObject({
         id: expect.any(String),
-        name: 'Minimal Webhook',
+        name: 'Minimal Generic Webhook',
         service: WebhookService.Generic,
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
       });
       expect(response.body.data[0]).not.toHaveProperty('url');
       expect(response.body.data[0]).not.toHaveProperty('description');
-      expect(response.body.data[0]).not.toHaveProperty('queryParams');
       expect(response.body.data[0]).not.toHaveProperty('headers');
       expect(response.body.data[0]).not.toHaveProperty('body');
     });
