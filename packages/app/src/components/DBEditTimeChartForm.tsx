@@ -51,6 +51,7 @@ import {
   IconArrowUp,
   IconBell,
   IconChartLine,
+  IconChartPie,
   IconCirclePlus,
   IconCode,
   IconDotsVertical,
@@ -68,6 +69,7 @@ import {
   AGG_FNS,
   buildTableRowSearchUrl,
   convertToNumberChartConfig,
+  convertToPieChartConfig,
   convertToTableChartConfig,
   convertToTimeChartConfig,
   getPreviousDateRange,
@@ -110,6 +112,7 @@ import ChartDisplaySettingsDrawer, {
   ChartConfigDisplaySettings,
 } from './ChartDisplaySettingsDrawer';
 import DBNumberChart from './DBNumberChart';
+import { DBPieChart } from './DBPieChart';
 import DBSqlRowTableWithSideBar from './DBSqlRowTableWithSidebar';
 import {
   CheckBoxControlled,
@@ -656,6 +659,8 @@ export default function EditTimeChartForm({
         return 'markdown';
       case DisplayType.Table:
         return 'table';
+      case DisplayType.Pie:
+        return 'pie';
       case DisplayType.Number:
         return 'number';
       default:
@@ -669,7 +674,9 @@ export default function EditTimeChartForm({
     }
   }, [displayType, setValue]);
 
-  const showGeneratedSql = ['table', 'time', 'number'].includes(activeTab); // Whether to show the generated SQL preview
+  const showGeneratedSql = ['table', 'time', 'number', 'pie'].includes(
+    activeTab,
+  ); // Whether to show the generated SQL preview
   const showSampleEvents = tableSource?.kind !== SourceKind.Metric;
 
   const [
@@ -936,6 +943,8 @@ export default function EditTimeChartForm({
         return convertToNumberChartConfig(config);
       } else if (activeTab === 'table') {
         return convertToTableChartConfig(config);
+      } else if (activeTab === 'pie') {
+        return convertToPieChartConfig(config);
       }
 
       return config;
@@ -1029,6 +1038,12 @@ export default function EditTimeChartForm({
                 leftSection={<IconNumbers size={16} />}
               >
                 Number
+              </Tabs.Tab>
+              <Tabs.Tab
+                value={DisplayType.Pie}
+                leftSection={<IconChartPie size={16} />}
+              >
+                Pie
               </Tabs.Tab>
               <Tabs.Tab
                 value={DisplayType.Search}
@@ -1200,24 +1215,25 @@ export default function EditTimeChartForm({
               <Divider mt="md" mb="sm" />
               <Flex mt={4} align="center" justify="space-between">
                 <Group gap="xs">
-                  {displayType !== DisplayType.Number && (
-                    <Button
-                      variant="subtle"
-                      size="sm"
-                      color="gray"
-                      onClick={() => {
-                        append({
-                          aggFn: 'count',
-                          aggCondition: '',
-                          aggConditionLanguage: 'lucene',
-                          valueExpression: '',
-                        });
-                      }}
-                    >
-                      <IconCirclePlus size={14} className="me-2" />
-                      Add Series
-                    </Button>
-                  )}
+                  {displayType !== DisplayType.Number &&
+                    displayType !== DisplayType.Pie && (
+                      <Button
+                        variant="subtle"
+                        size="sm"
+                        color="gray"
+                        onClick={() => {
+                          append({
+                            aggFn: 'count',
+                            aggCondition: '',
+                            aggConditionLanguage: 'lucene',
+                            valueExpression: '',
+                          });
+                        }}
+                      >
+                        <IconCirclePlus size={14} className="me-2" />
+                        Add Series
+                      </Button>
+                    )}
                   {fields.length == 2 && displayType !== DisplayType.Number && (
                     <Switch
                       label="As Ratio"
@@ -1490,6 +1506,14 @@ export default function EditTimeChartForm({
                 thresholdType: alert.thresholdType,
               })
             }
+            showMVOptimizationIndicator={false}
+          />
+        </div>
+      )}
+      {queryReady && dbTimeChartConfig != null && activeTab === 'pie' && (
+        <div className="flex-grow-1 d-flex flex-column" style={{ height: 400 }}>
+          <DBPieChart
+            config={dbTimeChartConfig}
             showMVOptimizationIndicator={false}
           />
         </div>

@@ -18,6 +18,8 @@ import Server from '@/server';
 import logger from '@/utils/logger';
 import { MetricModel } from '@/utils/logParser';
 
+import { ExternalDashboardTile } from './utils/zod';
+
 const MOCK_USER = {
   email: 'fake@deploysentinel.com',
   password: 'TacoCat!2#4X',
@@ -106,7 +108,6 @@ const connectClickhouse = async () => {
       PARTITION BY toDate(TimestampTime)
       PRIMARY KEY (ServiceName, TimestampTime)
       ORDER BY (ServiceName, TimestampTime, Timestamp)
-      TTL TimestampTime + toIntervalDay(3)
       SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
     `,
     // Recommended for cluster usage to avoid situations
@@ -148,7 +149,6 @@ const connectClickhouse = async () => {
       ENGINE = MergeTree
       PARTITION BY toDate(TimeUnix)
       ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
-      TTL toDateTime(TimeUnix) + toIntervalDay(3)
       SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
     `,
     // Recommended for cluster usage to avoid situations
@@ -192,7 +192,6 @@ const connectClickhouse = async () => {
       ENGINE = MergeTree
       PARTITION BY toDate(TimeUnix)
       ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
-      TTL toDateTime(TimeUnix) + toIntervalDay(15)
       SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
     `,
     // Recommended for cluster usage to avoid situations
@@ -240,7 +239,6 @@ const connectClickhouse = async () => {
       ENGINE = MergeTree
       PARTITION BY toDate(TimeUnix)
       ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
-      TTL toDateTime(TimeUnix) + toIntervalDay(3)
       SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
     `,
     // Recommended for cluster usage to avoid situations
@@ -612,6 +610,26 @@ export const makeExternalChart = (opts?: {
       groupBy: [],
     },
   ],
+});
+
+export const makeExternalTile = (opts?: {
+  sourceId?: string;
+}): ExternalDashboardTile => ({
+  name: 'Test Chart',
+  x: 1,
+  y: 1,
+  w: 1,
+  h: 1,
+  config: {
+    displayType: 'line',
+    sourceId: opts?.sourceId ?? '68dd82484f54641b08667897',
+    select: [
+      {
+        aggFn: 'count',
+        where: '',
+      },
+    ],
+  },
 });
 
 export const makeAlertInput = ({
