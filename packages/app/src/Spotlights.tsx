@@ -14,7 +14,7 @@ import {
   IconSettings,
 } from '@tabler/icons-react';
 
-import { useLogomark } from './theme/ThemeProvider';
+import { useBrandDisplayName, useLogomark } from './theme/ThemeProvider';
 import api from './api';
 import { useSavedSearches } from './savedSearch';
 
@@ -22,7 +22,8 @@ import '@mantine/spotlight/styles.css';
 
 export const useSpotlightActions = () => {
   const router = useRouter();
-  const Logomark = useLogomark();
+  const brandName = useBrandDisplayName();
+  const logomark = useLogomark({ size: 16 });
 
   const { data: logViewsData } = useSavedSearches();
   const { data: dashboardsData } = api.useDashboards();
@@ -151,18 +152,20 @@ export const useSpotlightActions = () => {
       {
         id: 'cloud',
         group: 'Menu',
-        leftSection: <Logomark size={16} />,
-        label: 'HyperDX Cloud',
-        description: 'Ready to use HyperDX Cloud? Get started for free.',
+        leftSection: logomark,
+        label: `${brandName} Cloud`,
+        description: `Ready to use ${brandName} Cloud? Get started for free.`,
         keywords: ['account', 'profile'],
         onClick: () => {
-          router.push('https://hyperdx.io/register');
+          router.push(
+            'https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started#deploy-with-clickhouse-cloud',
+          );
         },
       },
     );
 
     return logViewActions;
-  }, [Logomark, logViewsData, dashboardsData, router]);
+  }, [brandName, logomark, logViewsData, dashboardsData, router]);
 
   return { actions };
 };

@@ -1,5 +1,54 @@
 # @hyperdx/common-utils
 
+## 0.14.0
+
+### Minor Changes
+
+- 8326fc6e: feat: use optimization settings if available for use in CH
+
+## 0.13.0
+
+### Minor Changes
+
+- 051276fc: feat: pie chart now available for chart visualization
+- b676f268: feat: Add config property to external dashboard APIs. Deprecate series.
+
+### Patch Changes
+
+- 4f1da032: fix: clickstack build fixed when running same-site origin by omitting credentials from Authorization header for local mode fetch
+
+## 0.12.3
+
+### Patch Changes
+
+- a8aa94b0: feat: add filters to saved searches
+- c3bc43ad: fix: Avoid using bodyExpression for trace sources
+
+## 0.12.2
+
+### Patch Changes
+
+- b6c34b13: fix: Handling non-monotonic sums
+
+## 0.12.1
+
+### Patch Changes
+
+- 6cfa40a0: feat: Add support for querying nested/array columns with lucene
+
+## 0.12.0
+
+### Minor Changes
+
+- f44923ba: feat: Add auto-detecting and creating OTel sources during onboarding
+
+## 0.11.1
+
+### Patch Changes
+
+- 6aa3ac6f: fix: Fix missing negation in binary lucene expressions
+- b8ab312a: chore: improve Team typing
+
 ## 0.11.0
 
 ### Minor Changes

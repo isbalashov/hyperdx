@@ -103,10 +103,12 @@ import {
 import { useSearchPageFilterState } from '@/searchFilters';
 import SearchInputV2 from '@/SearchInputV2';
 import {
+  getEventBody,
   getFirstTimestampValueExpression,
   useSource,
   useSources,
 } from '@/source';
+import { useAppTheme, useBrandDisplayName } from '@/theme/ThemeProvider';
 import {
   parseRelativeTimeQuery,
   parseTimeQuery,
@@ -280,10 +282,13 @@ function ResumeLiveTailButton({
 }: {
   handleResumeLiveTail: () => void;
 }) {
+  const { themeName } = useAppTheme();
+  const variant = themeName === 'clickstack' ? 'secondary' : 'primary';
+
   return (
     <Button
       size="compact-xs"
-      variant="primary"
+      variant={variant}
       onClick={handleResumeLiveTail}
       leftSection={<IconBolt size={14} />}
     >
@@ -412,6 +417,7 @@ function SaveSearchModalComponent({
             whereLanguage: searchedConfig.whereLanguage ?? 'lucene',
             source: searchedConfig.source ?? '',
             orderBy: searchedConfig.orderBy ?? '',
+            filters: searchedConfig.filters ?? [],
             tags: tags,
           },
           {
@@ -429,6 +435,7 @@ function SaveSearchModalComponent({
             whereLanguage: searchedConfig.whereLanguage ?? 'lucene',
             source: searchedConfig.source ?? '',
             orderBy: searchedConfig.orderBy ?? '',
+            filters: searchedConfig.filters ?? [],
             tags: tags,
           },
           {
@@ -481,6 +488,22 @@ function SaveSearchModalComponent({
                 ORDER BY
               </Text>
               <Text size="xs">{chartConfig.orderBy}</Text>
+              {searchedConfig.filters && searchedConfig.filters.length > 0 && (
+                <>
+                  <Text size="xs" mb="xs" mt="sm">
+                    FILTERS
+                  </Text>
+                  <Stack gap="xs">
+                    {searchedConfig.filters.map((filter, idx) => (
+                      <Text key={idx} size="xs" c="dimmed">
+                        {filter.type === 'sql_ast'
+                          ? `${filter.left} ${filter.operator} ${filter.right}`
+                          : filter.condition}
+                      </Text>
+                    ))}
+                  </Stack>
+                </>
+              )}
             </Card>
           ) : (
             <Text>Loading Chart Config...</Text>
@@ -760,19 +783,16 @@ export function useDefaultOrderBy(sourceID: string | undefined | null) {
   const { data: source } = useSource({ id: sourceID });
   const { data: tableMetadata } = useTableMetadata(tcFromSource(source));
 
-  // If no source, return undefined so that the orderBy is not set incorrectly
-  if (!source) return undefined;
-
   // When source changes, make sure select and orderby fields are set to default
-  return useMemo(
-    () =>
-      optimizeDefaultOrderBy(
-        source?.timestampValueExpression ?? '',
-        source?.displayedTimestampValueExpression,
-        tableMetadata?.sorting_key,
-      ),
-    [source, tableMetadata],
-  );
+  return useMemo(() => {
+    // If no source, return undefined so that the orderBy is not set incorrectly
+    if (!source) return undefined;
+    return optimizeDefaultOrderBy(
+      source?.timestampValueExpression ?? '',
+      source?.displayedTimestampValueExpression,
+      tableMetadata?.sorting_key,
+    );
+  }, [source, tableMetadata]);
 }
 
 // This is outside as it needs to be a stable reference
@@ -786,6 +806,7 @@ const queryStateMap = {
 };
 
 function DBSearchPage() {
+  const brandName = useBrandDisplayName();
   // Next router is laggy behind window.location, which causes race
   // conditions with useQueryStates, so we'll parse it directly
   const paths = window.location.pathname.split('/');
@@ -893,6 +914,7 @@ function DBSearchPage() {
       where: _savedSearch?.where ?? '',
       whereLanguage: _savedSearch?.whereLanguage ?? 'lucene',
       source: _savedSearch?.source,
+      filters: _savedSearch?.filters ?? [],
       orderBy: _savedSearch?.orderBy || defaultOrderBy,
     };
   }, [searchedSource, inputSource, savedSearch, defaultOrderBy, savedSearchId]);
@@ -937,33 +959,34 @@ function DBSearchPage() {
     const isSearchConfigEmpty =
       !source && !where && !select && !whereLanguage && !filters?.length;
 
-    if (isSearchConfigEmpty) {
-      // Landed on saved search (if we just landed on a searchId route)
-      if (
-        savedSearch != null && // Make sure saved search data is loaded
-        savedSearch.id === savedSearchId // Make sure we've loaded the correct saved search
-      ) {
-        setSearchedConfig({
-          source: savedSearch.source,
-          where: savedSearch.where,
-          select: savedSearch.select,
-          whereLanguage: savedSearch.whereLanguage as 'sql' | 'lucene',
-          orderBy: savedSearch.orderBy ?? '',
-        });
-        return;
-      }
+    // Landed on saved search (if we just landed on a searchId route)
+    if (
+      savedSearch != null && // Make sure saved search data is loaded
+      savedSearch.id === savedSearchId && // Make sure we've loaded the correct saved search
+      isSearchConfigEmpty // Only populate if URL doesn't have explicit config
+    ) {
+      setSearchedConfig({
+        source: savedSearch.source,
+        where: savedSearch.where,
+        select: savedSearch.select,
+        whereLanguage: savedSearch.whereLanguage as 'sql' | 'lucene',
+        filters: savedSearch.filters ?? [],
+        orderBy: savedSearch.orderBy ?? '',
+      });
+      return;
+    }
 
-      // Landed on a new search - ensure we have a source selected
-      if (savedSearchId == null && defaultSourceId) {
-        setSearchedConfig({
-          source: defaultSourceId,
-          where: '',
-          select: '',
-          whereLanguage: 'lucene',
-          orderBy: '',
-        });
-        return;
-      }
+    // Landed on a new search - ensure we have a source selected
+    if (savedSearchId == null && defaultSourceId && isSearchConfigEmpty) {
+      setSearchedConfig({
+        source: defaultSourceId,
+        where: '',
+        select: '',
+        whereLanguage: 'lucene',
+        filters: [],
+        orderBy: '',
+      });
+      return;
     }
   }, [
     savedSearch,
@@ -1055,13 +1078,14 @@ function DBSearchPage() {
         if (savedSearchId == null || savedSearch?.source !== watchedSource) {
           setValue('select', '');
           setValue('orderBy', '');
+          // Clear all search filters only when switching to a different source
+          searchFilters.clearAllFilters();
           // If the user is in a saved search, prefer the saved search's select/orderBy if available
         } else {
           setValue('select', savedSearch?.select ?? '');
           setValue('orderBy', savedSearch?.orderBy ?? '');
+          // Don't clear filters - we're loading from saved search
         }
-        // Clear all search filters
-        searchFilters.clearAllFilters();
       }
     }
   }, [
@@ -1152,6 +1176,7 @@ function DBSearchPage() {
             whereLanguage: searchedConfig.whereLanguage ?? 'lucene',
             source: searchedConfig.source ?? '',
             orderBy: searchedConfig.orderBy ?? '',
+            filters: searchedConfig.filters ?? [],
             tags: newTags,
           },
           {
@@ -1553,7 +1578,7 @@ function DBSearchPage() {
     >
       <Head>
         <title>
-          {savedSearch ? `${savedSearch.name} Search` : 'Search'} - HyperDX
+          {savedSearch ? `${savedSearch.name} Search` : 'Search'} - {brandName}
         </title>
       </Head>
       {!IS_LOCAL_MODE && isAlertModalOpen && (
@@ -1785,8 +1810,8 @@ function DBSearchPage() {
           <Paper shadow="xs" p="xl" h="100%">
             <Center mih={100} h="100%">
               <Text size="sm">
-                Please start by selecting a database, table, and timestamp
-                column above to view data.
+                Please start by selecting a source and then click the play
+                button to query data.
               </Text>
             </Center>
           </Paper>
@@ -1848,7 +1873,7 @@ function DBSearchPage() {
                         />
                       </Box>
                     )}
-                    <Box flex="1" mih="0">
+                    <Box flex="1" mih="0" px="sm">
                       <PatternTable
                         source={searchedSource}
                         config={{
@@ -1856,9 +1881,9 @@ function DBSearchPage() {
                           dateRange: searchedTimeRange,
                         }}
                         bodyValueExpression={
-                          searchedSource?.bodyExpression ??
-                          chartConfig.implicitColumnExpression ??
-                          ''
+                          searchedSource
+                            ? (getEventBody(searchedSource) ?? '')
+                            : (chartConfig.implicitColumnExpression ?? '')
                         }
                         totalCountConfig={histogramTimeChartConfig}
                         totalCountQueryKeyPrefix={QUERY_KEY_PREFIX}
@@ -1877,10 +1902,9 @@ function DBSearchPage() {
                   source={searchedSource}
                 />
               )}
-              <Flex direction="column" mih="0">
-                {analysisMode === 'results' &&
-                  chartConfig &&
-                  histogramTimeChartConfig && (
+              {analysisMode === 'results' && (
+                <Flex direction="column" mih="0">
+                  {chartConfig && histogramTimeChartConfig && (
                     <>
                       <Box className={searchPageStyles.searchStatsContainer}>
                         <Group
@@ -1894,7 +1918,6 @@ function DBSearchPage() {
                           />
                           <Group gap="sm" align="center">
                             {shouldShowLiveModeHint &&
-                              analysisMode === 'results' &&
                               denoiseResults != true && (
                                 <ResumeLiveTailButton
                                   handleResumeLiveTail={handleResumeLiveTail}
@@ -1931,109 +1954,95 @@ function DBSearchPage() {
                       )}
                     </>
                   )}
-                {hasQueryError && queryError ? (
-                  <>
-                    <div className="h-100 w-100 px-4 mt-4 align-items-center justify-content-center text-muted overflow-auto">
-                      {whereSuggestions && whereSuggestions.length > 0 && (
-                        <Box mb="xl">
-                          <Text size="lg">
-                            <b>Query Helper</b>
+                  {hasQueryError && queryError ? (
+                    <>
+                      <div className="h-100 w-100 px-4 mt-4 align-items-center justify-content-center text-muted overflow-auto">
+                        {whereSuggestions && whereSuggestions.length > 0 && (
+                          <Box mb="xl">
+                            <Text size="lg">
+                              <b>Query Helper</b>
+                            </Text>
+                            <Grid>
+                              {whereSuggestions!.map(s => (
+                                <>
+                                  <Grid.Col span={10}>
+                                    <Text>{s.userMessage('where')}</Text>
+                                  </Grid.Col>
+                                  <Grid.Col span={2}>
+                                    <Button
+                                      onClick={() =>
+                                        setValue('where', s.corrected())
+                                      }
+                                    >
+                                      Accept
+                                    </Button>
+                                  </Grid.Col>
+                                </>
+                              ))}
+                            </Grid>
+                          </Box>
+                        )}
+                        <Box mt="sm">
+                          <Text my="sm" size="sm">
+                            Error encountered for query with inputs:
                           </Text>
-                          <Grid>
-                            {whereSuggestions!.map(s => (
-                              <>
-                                <Grid.Col span={10}>
-                                  <Text>{s.userMessage('where')}</Text>
-                                </Grid.Col>
-                                <Grid.Col span={2}>
-                                  <Button
-                                    onClick={() =>
-                                      setValue('where', s.corrected())
-                                    }
-                                  >
-                                    Accept
-                                  </Button>
-                                </Grid.Col>
-                              </>
-                            ))}
-                          </Grid>
-                        </Box>
-                      )}
-                      <Box mt="sm">
-                        <Text my="sm" size="sm">
-                          Error encountered for query with inputs:
-                        </Text>
-                        <Paper
-                          flex="auto"
-                          p={'sm'}
-                          shadow="none"
-                          radius="sm"
-                          style={{ overflow: 'hidden' }}
-                        >
-                          <Grid>
-                            <Grid.Col span={2}>
-                              <Text>SELECT</Text>
-                            </Grid.Col>
-                            <Grid.Col span={10}>
-                              <SQLPreview
-                                data={`${chartConfig.select as string}`}
-                                formatData={false}
-                              />
-                            </Grid.Col>
-                            <Grid.Col span={2}>
-                              <Text>ORDER BY</Text>
-                            </Grid.Col>
-                            <Grid.Col span={10}>
-                              <SQLPreview
-                                data={`${chartConfig.orderBy}`}
-                                formatData={false}
-                              />
-                            </Grid.Col>
-                            <Grid.Col span={2}>
-                              <Text>
-                                {chartConfig.whereLanguage === 'lucene'
-                                  ? 'Searched For'
-                                  : 'WHERE'}
-                              </Text>
-                            </Grid.Col>
-                            <Grid.Col span={10}>
-                              {chartConfig.whereLanguage === 'lucene' ? (
-                                <CodeMirror
-                                  indentWithTab={false}
-                                  value={chartConfig.where}
-                                  theme="dark"
-                                  basicSetup={{
-                                    lineNumbers: false,
-                                    foldGutter: false,
-                                    highlightActiveLine: false,
-                                    highlightActiveLineGutter: false,
-                                  }}
-                                  editable={false}
+                          <Paper
+                            flex="auto"
+                            p={'sm'}
+                            shadow="none"
+                            radius="sm"
+                            style={{ overflow: 'hidden' }}
+                          >
+                            <Grid>
+                              <Grid.Col span={2}>
+                                <Text>SELECT</Text>
+                              </Grid.Col>
+                              <Grid.Col span={10}>
+                                <SQLPreview
+                                  data={`${chartConfig.select as string}`}
+                                  formatData={false}
                                 />
-                              ) : (
-                                <SQLPreview data={`${chartConfig.where}`} />
-                              )}
-                            </Grid.Col>
-                          </Grid>
-                        </Paper>
-                      </Box>
-                      <Box mt="lg">
-                        <Text my="sm" size="sm">
-                          Error Message:
-                        </Text>
-                        <Code
-                          block
-                          style={{
-                            whiteSpace: 'pre-wrap',
-                          }}
-                        >
-                          {queryError.message}
-                        </Code>
-                      </Box>
-                      {queryError instanceof ClickHouseQueryError && (
+                              </Grid.Col>
+                              <Grid.Col span={2}>
+                                <Text>ORDER BY</Text>
+                              </Grid.Col>
+                              <Grid.Col span={10}>
+                                <SQLPreview
+                                  data={`${chartConfig.orderBy}`}
+                                  formatData={false}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={2}>
+                                <Text>
+                                  {chartConfig.whereLanguage === 'lucene'
+                                    ? 'Searched For'
+                                    : 'WHERE'}
+                                </Text>
+                              </Grid.Col>
+                              <Grid.Col span={10}>
+                                {chartConfig.whereLanguage === 'lucene' ? (
+                                  <CodeMirror
+                                    indentWithTab={false}
+                                    value={chartConfig.where}
+                                    theme="dark"
+                                    basicSetup={{
+                                      lineNumbers: false,
+                                      foldGutter: false,
+                                      highlightActiveLine: false,
+                                      highlightActiveLineGutter: false,
+                                    }}
+                                    editable={false}
+                                  />
+                                ) : (
+                                  <SQLPreview data={`${chartConfig.where}`} />
+                                )}
+                              </Grid.Col>
+                            </Grid>
+                          </Paper>
+                        </Box>
                         <Box mt="lg">
                           <Text my="sm" size="sm">
-                            Original Query:
+                            Error Message:
                           </Text>
                           <Code
                             block
@@ -2041,38 +2050,52 @@ function DBSearchPage() {
                               whiteSpace: 'pre-wrap',
                             }}
                           >
-                            <SQLPreview data={queryError.query} formatData />
+                            {queryError.message}
                           </Code>
                         </Box>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <Box flex="1" mih="0">
-                    {chartConfig &&
-                      searchedConfig.source &&
-                      dbSqlRowTableConfig &&
-                      analysisMode === 'results' && (
-                        <DBSqlRowTableWithSideBar
-                          context={rowTableContext}
-                          config={dbSqlRowTableConfig}
-                          sourceId={searchedConfig.source}
-                          onSidebarOpen={onSidebarOpen}
-                          onExpandedRowsChange={onExpandedRowsChange}
-                          enabled={isReady}
-                          isLive={isLive ?? true}
-                          queryKeyPrefix={QUERY_KEY_PREFIX}
-                          onScroll={onTableScroll}
-                          onError={handleTableError}
-                          denoiseResults={denoiseResults}
-                          collapseAllRows={collapseAllRows}
-                          onSortingChange={onSortingChange}
-                          initialSortBy={initialSortBy}
-                        />
-                      )}
-                  </Box>
-                )}
-              </Flex>
+                        {queryError instanceof ClickHouseQueryError && (
+                          <Box mt="lg">
+                            <Text my="sm" size="sm">
+                              Original Query:
+                            </Text>
+                            <Code
+                              block
+                              style={{
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              <SQLPreview data={queryError.query} formatData />
+                            </Code>
+                          </Box>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <Box flex="1" mih="0" px="sm">
+                      {chartConfig &&
+                        searchedConfig.source &&
+                        dbSqlRowTableConfig && (
+                          <DBSqlRowTableWithSideBar
+                            context={rowTableContext}
+                            config={dbSqlRowTableConfig}
+                            sourceId={searchedConfig.source}
+                            onSidebarOpen={onSidebarOpen}
+                            onExpandedRowsChange={onExpandedRowsChange}
+                            enabled={isReady}
+                            isLive={isLive ?? true}
+                            queryKeyPrefix={QUERY_KEY_PREFIX}
+                            onScroll={onTableScroll}
+                            onError={handleTableError}
+                            denoiseResults={denoiseResults}
+                            collapseAllRows={collapseAllRows}
+                            onSortingChange={onSortingChange}
+                            initialSortBy={initialSortBy}
+                          />
+                        )}
+                    </Box>
+                  )}
+                </Flex>
+              )}
             </div>
           </>
         )}

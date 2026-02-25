@@ -7,7 +7,6 @@ import randomUUID from 'crypto-randomuuid';
 import { enableMapSet } from 'immer';
 import { QueryParamProvider } from 'use-query-params';
 import HyperDX from '@hyperdx/browser';
-import { ColorSchemeScript } from '@mantine/core';
 import {
   MutationCache,
   QueryCache,
@@ -26,18 +25,23 @@ import {
 import { ibmPlexMono, inter, roboto, robotoMono } from '@/fonts';
 import { AppThemeProvider, useAppTheme } from '@/theme/ThemeProvider';
 import { ThemeWrapper } from '@/ThemeWrapper';
-import { useConfirmModal } from '@/useConfirm';
+import { NextApiConfigResponseData } from '@/types';
+import { ConfirmProvider } from '@/useConfirm';
 import { QueryParamProvider as HDXQueryParamProvider } from '@/useQueryParam';
-import { useUserPreferences } from '@/useUserPreferences';
+import {
+  SystemColorSchemeScript,
+  useResolvedColorScheme,
+  useUserPreferences,
+} from '@/useUserPreferences';
 
 import '@mantine/core/styles.css';
-import '@mantine/notifications/styles.css';
 import '@mantine/dates/styles.css';
 import '@mantine/dropzone/styles.css';
-import '@styles/globals.css';
+import '@mantine/notifications/styles.css';
 import '@styles/app.scss';
-import 'uplot/dist/uPlot.min.css';
+import '@styles/globals.css';
 import '@xyflow/react/dist/style.css';
+import 'uplot/dist/uPlot.min.css';
 
 // Polyfill crypto.randomUUID for non-HTTPS environments
 if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
@@ -67,7 +71,6 @@ type AppPropsWithLayout = AppProps & {
 // Component that renders Head content requiring user preferences
 // Must be rendered inside AppThemeProvider to avoid hydration mismatch
 function AppHeadContent() {
-  const { userPreferences } = useUserPreferences();
   const { theme } = useAppTheme();
 
   return (
@@ -75,11 +78,7 @@ function AppHeadContent() {
       <title>{theme.displayName}</title>
       <meta name="viewport" content="width=device-width, initial-scale=0.75" />
       <meta name="google" content="notranslate" />
-      <ColorSchemeScript
-        forceColorScheme={
-          userPreferences.colorMode === 'dark' ? 'dark' : 'light'
-        }
-      />
+      <SystemColorSchemeScript />
     </Head>
   );
 }
@@ -89,46 +88,45 @@ function AppHeadContent() {
 function AppContent({
   Component,
   pageProps,
-  confirmModal,
 }: {
   Component: NextPageWithLayout;
   pageProps: AppProps['pageProps'];
-  confirmModal: React.ReactNode;
 }) {
   const { userPreferences } = useUserPreferences();
+  const resolvedColorScheme = useResolvedColorScheme();
+  const { themeName } = useAppTheme();
 
-  // Only override font if user has explicitly set a preference.
-  // Otherwise, return undefined to let the theme use its default font:
-  // - HyperDX theme: "IBM Plex Sans", monospace
-  // - ClickStack theme: "Inter", sans-serif
-  const selectedMantineFont = userPreferences.font
-    ? MANTINE_FONT_MAP[userPreferences.font] || undefined
+  // ClickStack theme always uses Inter font - user preference is ignored
+  // HyperDX theme allows user to select font preference
+  const isClickStackTheme = themeName === 'clickstack';
+  const effectiveFont = isClickStackTheme ? 'Inter' : userPreferences.font;
+  const selectedMantineFont = effectiveFont
+    ? MANTINE_FONT_MAP[effectiveFont] || undefined
     : undefined;
 
   useEffect(() => {
     // Update CSS variable for global font cascading
     if (typeof document !== 'undefined') {
-      const fontVar = FONT_VAR_MAP[userPreferences.font] || DEFAULT_FONT_VAR;
+      const fontVar = FONT_VAR_MAP[effectiveFont] || DEFAULT_FONT_VAR;
       document.documentElement.style.setProperty('--app-font-family', fontVar);
     }
-  }, [userPreferences.font]);
+  }, [effectiveFont]);
 
   const getLayout = Component.getLayout ?? (page => page);
 
   return (
     <ThemeWrapper
       fontFamily={selectedMantineFont}
-      colorScheme={userPreferences.colorMode === 'dark' ? 'dark' : 'light'}
+      colorScheme={resolvedColorScheme}
     >
-      {getLayout(<Component {...pageProps} />)}
-      {confirmModal}
+      <ConfirmProvider>
+        {getLayout(<Component {...pageProps} />)}
+      </ConfirmProvider>
     </ThemeWrapper>
   );
 }
 
 export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
-  const confirmModal = useConfirmModal();
-
   // port to react query ? (needs to wrap with QueryClientProvider)
   useEffect(() => {
     if (IS_LOCAL_MODE) {
@@ -136,15 +134,8 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
     }
     fetch('/api/config')
       .then(res => res.json())
-      .then(_jsonData => {
+      .then((_jsonData?: NextApiConfigResponseData) => {
         if (_jsonData?.apiKey) {
-          let hostname;
-          try {
-            const url = new URL(_jsonData.apiServerUrl);
-            hostname = url.hostname;
-          } catch (err) {
-            // ignore
-          }
           HyperDX.init({
             apiKey: _jsonData.apiKey,
             consoleCapture: true,
@@ -155,7 +146,7 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
             url: _jsonData.collectorUrl,
           });
         } else {
-          console.warn('No API key found');
+          console.warn('No API key found to enable OTEL exporter');
         }
       })
       .catch(err => {
@@ -187,11 +178,7 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
         <HDXQueryParamProvider>
           <QueryParamProvider adapter={NextAdapter}>
             <QueryClientProvider client={queryClient}>
-              <AppContent
-                Component={Component}
-                pageProps={pageProps}
-                confirmModal={confirmModal}
-              />
+              <AppContent Component={Component} pageProps={pageProps} />
               <ReactQueryDevtools initialIsOpen={true} />
             </QueryClientProvider>
           </QueryParamProvider>

@@ -1,11 +1,12 @@
 import { splitAndTrimWithBracket } from '@hyperdx/common-utils/dist/core/utils';
 import {
   AggregateFunctionSchema,
+  DashboardFilter,
   DisplayType,
   SavedChartConfig,
   SelectList,
 } from '@hyperdx/common-utils/dist/types';
-import { pick } from 'lodash';
+import { omit } from 'lodash';
 import { FlattenMaps, LeanDocument } from 'mongoose';
 
 import {
@@ -16,9 +17,10 @@ import {
   AlertThresholdType,
 } from '@/models/alert';
 import type { DashboardDocument } from '@/models/dashboard';
+import { SeriesTile } from '@/routers/external-api/v2/utils/dashboards';
 import {
   ChartSeries,
-  ExternalDashboardTileWithId,
+  ExternalDashboardFilterWithId,
   MarkdownChartSeries,
   NumberChartSeries,
   SearchChartSeries,
@@ -201,20 +203,8 @@ const convertChartConfigToExternalChartSeries = (
   }
 };
 
-function translateTileToExternalChart(
-  tile: DashboardDocument['tiles'][number],
-): ExternalDashboardTileWithId {
-  const { name, seriesReturnType } = tile.config;
-  return {
-    ...pick(tile, ['id', 'x', 'y', 'w', 'h']),
-    asRatio: seriesReturnType === 'ratio',
-    name: name ?? '',
-    series: convertChartConfigToExternalChartSeries(tile.config),
-  };
-}
-
 export function translateExternalChartToTileConfig(
-  chart: ExternalDashboardTileWithId,
+  chart: SeriesTile,
 ): DashboardDocument['tiles'][number] {
   const { id, name, x, y, w, h, series, asRatio } = chart;
 
@@ -388,27 +378,21 @@ export function translateExternalChartToTileConfig(
   };
 }
 
-export type ExternalDashboard = {
-  id: string;
-  name: string;
-  tiles: ExternalDashboardTileWithId[];
-  tags?: string[];
-};
-
-export type ExternalDashboardRequest = {
-  name: string;
-  tiles: ExternalDashboardTileWithId[];
-  tags?: string[];
-};
-
-export function translateDashboardDocumentToExternalDashboard(
-  dashboard: DashboardDocument,
-): ExternalDashboard {
+export function translateFilterToExternalFilter(
+  filter: DashboardFilter,
+): ExternalDashboardFilterWithId {
   return {
-    id: dashboard._id.toString(),
-    name: dashboard.name,
-    tiles: dashboard.tiles.map(translateTileToExternalChart),
-    tags: dashboard.tags || [],
+    ...omit(filter, 'source'),
+    sourceId: filter.source.toString(),
+  };
+}
+
+export function translateExternalFilterToFilter(
+  filter: ExternalDashboardFilterWithId,
+): DashboardFilter {
+  return {
+    ...omit(filter, 'sourceId'),
+    source: filter.sourceId,
   };
 }
 
@@ -423,10 +407,10 @@ export type ExternalAlert = {
   source?: string;
   state: AlertState;
   channel: AlertChannel;
-  team: string;
+  teamId: string;
   tileId?: string;
-  dashboard?: string;
-  savedSearch?: string;
+  dashboardId?: string;
+  savedSearchId?: string;
   groupBy?: string;
   silenced?: {
     by?: string;
@@ -484,10 +468,10 @@ export function translateAlertDocumentToExternalAlert(
     source: alertObj.source,
     state: alertObj.state,
     channel: alertObj.channel,
-    team: alertObj.team.toString(),
+    teamId: alertObj.team.toString(),
     tileId: alertObj.tileId,
-    dashboard: alertObj.dashboard?.toString(),
-    savedSearch: alertObj.savedSearch?.toString(),
+    dashboardId: alertObj.dashboard?.toString(),
+    savedSearchId: alertObj.savedSearch?.toString(),
     groupBy: alertObj.groupBy,
     silenced: transformSilencedToExternalSilenced(alertObj.silenced),
     createdAt: hasCreatedAt(alertObj)

@@ -1,6 +1,24 @@
 #!/bin/sh
 set -e
 
+# Fall back to legacy schema when the ClickHouse JSON feature gate is enabled
+if echo "$OTEL_AGENT_FEATURE_GATE_ARG" | grep -q "clickhouse.json"; then
+  export HYPERDX_OTEL_EXPORTER_CREATE_LEGACY_SCHEMA=true
+fi
+
+# Run ClickHouse schema migrations if not using legacy schema creation
+if [ "$HYPERDX_OTEL_EXPORTER_CREATE_LEGACY_SCHEMA" != "true" ]; then
+  # Run Go-based migrate tool with TLS support
+  # TLS configuration:
+  # - CLICKHOUSE_TLS_CA_FILE: CA certificate file
+  # - CLICKHOUSE_TLS_CERT_FILE: Client certificate file
+  # - CLICKHOUSE_TLS_KEY_FILE: Client private key file
+  # - CLICKHOUSE_TLS_SERVER_NAME_OVERRIDE: Server name for TLS verification
+  # - CLICKHOUSE_TLS_INSECURE_SKIP_VERIFY: Skip TLS verification (set to "true")
+  echo "🚀 Using Go-based migrate tool with TLS support 🔐"
+  migrate /etc/otel/schema/seed
+fi
+
 # Check if OPAMP_SERVER_URL is defined to determine mode
 if [ -z "$OPAMP_SERVER_URL" ]; then
   # Standalone mode - run collector directly without supervisor
@@ -9,10 +27,21 @@ if [ -z "$OPAMP_SERVER_URL" ]; then
   # Build collector arguments with multiple config files
   COLLECTOR_ARGS="--config /etc/otelcol-contrib/config.yaml --config /etc/otelcol-contrib/standalone-config.yaml"
 
+  # Add bearer token auth config if OTLP_AUTH_TOKEN is specified (only used in standalone mode)
+  if [ -n "$OTLP_AUTH_TOKEN" ]; then
+    echo "OTLP_AUTH_TOKEN is configured, enabling bearer token authentication"
+    COLLECTOR_ARGS="$COLLECTOR_ARGS --config /etc/otelcol-contrib/standalone-auth-config.yaml"
+  fi
+
   # Add custom config file if specified
   if [ -n "$CUSTOM_OTELCOL_CONFIG_FILE" ]; then
     echo "Including custom config: $CUSTOM_OTELCOL_CONFIG_FILE"
     COLLECTOR_ARGS="$COLLECTOR_ARGS --config $CUSTOM_OTELCOL_CONFIG_FILE"
+  fi
+
+  # Pass feature gates to the collector in standalone mode
+  if [ -n "$OTEL_AGENT_FEATURE_GATE_ARG" ]; then
+    COLLECTOR_ARGS="$COLLECTOR_ARGS $OTEL_AGENT_FEATURE_GATE_ARG"
   fi
 
   # Execute collector directly

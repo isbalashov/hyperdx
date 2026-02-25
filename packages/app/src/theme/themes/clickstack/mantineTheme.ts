@@ -214,6 +214,9 @@ export const makeTheme = ({
       },
     }),
     Button: Button.extend({
+      defaultProps: {
+        variant: 'primary',
+      },
       vars: (_theme, props) => {
         const baseVars: Record<string, string> = {};
 
@@ -228,6 +231,7 @@ export const makeTheme = ({
           baseVars['--button-bg'] = 'var(--color-primary-button-bg)';
           baseVars['--button-hover'] = 'var(--color-primary-button-bg-hover)';
           baseVars['--button-color'] = 'var(--color-primary-button-text)';
+          baseVars['--button-color-hover'] = 'var(--color-primary-button-text)';
         }
 
         if (props.variant === 'secondary') {

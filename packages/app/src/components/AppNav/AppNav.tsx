@@ -391,8 +391,8 @@ function useSearchableList<T extends AppNavLinkItem>({
 }
 
 export default function AppNav({ fixed = false }: { fixed?: boolean }) {
-  const Wordmark = useWordmark();
-  const Logomark = useLogomark();
+  const wordmark = useWordmark();
+  const logomark = useLogomark({ size: 22 });
 
   useEffect(() => {
     let redirectUrl;
@@ -461,7 +461,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
   const isSmallScreen = (width ?? 1000) < 900;
   const isCollapsed = isSmallScreen || isPreferCollapsed;
 
-  const navWidth = isCollapsed ? 50 : 230;
+  const navWidth = isCollapsed ? 50 : 250;
 
   useEffect(() => {
     HyperDX.addAction('user navigated', {
@@ -663,6 +663,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
       <div
         className={cx(styles.nav, {
           [styles.navFixed]: fixed,
+          [styles.navCollapsed]: isCollapsed,
         })}
         style={{ width: navWidth }}
       >
@@ -670,16 +671,15 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
           <div
             className={cx(styles.header, {
               [styles.headerExpanded]: !isCollapsed,
+              [styles.headerCollapsed]: isCollapsed,
             })}
           >
             <Link href="/search" className={styles.logoLink}>
               {isCollapsed ? (
-                <div className={styles.logoIconWrapper}>
-                  <Logomark size={22} />
-                </div>
+                <div className={styles.logoIconWrapper}>{logomark}</div>
               ) : (
                 <Group gap="xs" align="center">
-                  <Wordmark />
+                  {wordmark}
                   {isUTC && (
                     <Badge
                       size="xs"
