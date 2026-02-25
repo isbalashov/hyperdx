@@ -13,13 +13,16 @@ import {
   Menu,
   SimpleGrid,
   Stack,
+  Table,
   Text,
   TextInput,
 } from '@mantine/core';
+import { useLocalStorage } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
   IconDots,
   IconLayoutGrid,
+  IconList,
   IconPlus,
   IconSearch,
   IconServer,
@@ -114,6 +117,73 @@ function DashboardCard({
   );
 }
 
+function DashboardListRow({
+  dashboard,
+  onDelete,
+}: {
+  dashboard: Dashboard;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <Table.Tr
+      style={{ cursor: 'pointer' }}
+      onClick={() => Router.push(`/dashboards/${dashboard.id}`)}
+    >
+      <Table.Td>
+        <Text
+          component={Link}
+          href={`/dashboards/${dashboard.id}`}
+          fw={500}
+          size="sm"
+          style={{ textDecoration: 'none' }}
+          onClick={e => e.stopPropagation()}
+        >
+          {dashboard.name}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Group gap={4}>
+          {dashboard.tags.map(tag => (
+            <Badge key={tag} variant="light" size="xs">
+              {tag}
+            </Badge>
+          ))}
+        </Group>
+      </Table.Td>
+      <Table.Td>
+        <Text size="xs" c="dimmed">
+          {dashboard.tiles.length}
+        </Text>
+      </Table.Td>
+      <Table.Td>
+        <Menu position="bottom-end" withinPortal>
+          <Menu.Target>
+            <ActionIcon
+              variant="secondary"
+              size="sm"
+              onClick={e => e.stopPropagation()}
+            >
+              <IconDots size={14} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item
+              color="red"
+              leftSection={<IconTrash size={14} />}
+              onClick={e => {
+                e.stopPropagation();
+                onDelete(dashboard.id);
+              }}
+            >
+              Delete
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      </Table.Td>
+    </Table.Tr>
+  );
+}
+
 function PresetDashboardCard({
   name,
   href,
@@ -151,6 +221,10 @@ export default function DashboardsListPage() {
   const createDashboard = useCreateDashboard();
   const deleteDashboard = useDeleteDashboard();
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useLocalStorage<string>({
+    key: 'dashboardsViewMode',
+    defaultValue: 'grid',
+  });
 
   const presets = useMemo(() => {
     if (IS_K8S_DASHBOARD_ENABLED) {
@@ -228,15 +302,35 @@ export default function DashboardsListPage() {
             onChange={e => setSearch(e.currentTarget.value)}
             style={{ flex: 1, maxWidth: 400 }}
           />
-          <Button
-            variant="primary"
-            leftSection={<IconPlus size={16} />}
-            onClick={handleCreate}
-            loading={createDashboard.isPending}
-            data-testid="create-dashboard-button"
-          >
-            New Dashboard
-          </Button>
+          <Group gap="xs" align="center">
+            <ActionIcon.Group>
+              <ActionIcon
+                variant={viewMode === 'grid' ? 'primary' : 'secondary'}
+                size="input-sm"
+                onClick={() => setViewMode('grid')}
+                aria-label="Grid view"
+              >
+                <IconLayoutGrid size={16} />
+              </ActionIcon>
+              <ActionIcon
+                variant={viewMode === 'list' ? 'primary' : 'secondary'}
+                size="input-sm"
+                onClick={() => setViewMode('list')}
+                aria-label="List view"
+              >
+                <IconList size={16} />
+              </ActionIcon>
+            </ActionIcon.Group>
+            <Button
+              variant="primary"
+              leftSection={<IconPlus size={16} />}
+              onClick={handleCreate}
+              loading={createDashboard.isPending}
+              data-testid="create-dashboard-button"
+            >
+              New Dashboard
+            </Button>
+          </Group>
         </Flex>
 
         {!IS_LOCAL_MODE && (
@@ -284,6 +378,26 @@ export default function DashboardsListPage() {
               )}
             </Stack>
           </Card>
+        ) : viewMode === 'list' ? (
+          <Table highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Name</Table.Th>
+                <Table.Th>Tags</Table.Th>
+                <Table.Th>Tiles</Table.Th>
+                <Table.Th w={50} />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {filteredDashboards.map(d => (
+                <DashboardListRow
+                  key={d.id}
+                  dashboard={d}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </Table.Tbody>
+          </Table>
         ) : (
           <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
             {filteredDashboards.map(d => (
