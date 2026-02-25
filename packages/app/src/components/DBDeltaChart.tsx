@@ -17,7 +17,6 @@ import {
   Filter,
 } from '@hyperdx/common-utils/dist/types';
 import {
-  ActionIcon,
   Box,
   Code,
   Container,
@@ -25,11 +24,9 @@ import {
   Flex,
   Pagination,
   Text,
-  Tooltip as MantineTooltip,
 } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import {
-  IconCheck,
   IconCopy,
   IconFilter,
   IconFilterX,
@@ -45,6 +42,7 @@ import {
 } from '@/utils';
 
 import { SQLPreview } from './ChartSQLPreview';
+import { DBRowTableIconButton } from './DBTable/DBRowTableIconButton';
 
 import styles from '../../styles/HDXLineChart.module.scss';
 
@@ -561,7 +559,8 @@ function PropertyComparisonChart({
           />
           <Tooltip
             content={<HDXBarChartTooltip title={name} />}
-            allowEscapeViewBox={{ y: true }}
+            allowEscapeViewBox={{ x: true, y: true }}
+            wrapperStyle={{ zIndex: 9998 }}
           />
           <Bar
             dataKey="outlierCount"
@@ -655,72 +654,44 @@ function PropertyComparisonChart({
             <Flex gap={4} align="center">
               {onAddFilter && (
                 <>
-                  <MantineTooltip
-                    label="Filter for this value"
-                    position="top"
-                    withArrow
-                    fz="xs"
-                    zIndex={10000}
+                  <DBRowTableIconButton
+                    variant="copy"
+                    title="Filter for this value"
+                    onClick={() => {
+                      onAddFilter(name, clickedBar.value, 'include');
+                      setClickedBar(null);
+                    }}
                   >
-                    <ActionIcon
-                      variant="primary"
-                      size="xs"
-                      onClick={() => {
-                        onAddFilter(name, clickedBar.value, 'include');
-                        setClickedBar(null);
-                      }}
-                    >
-                      <IconFilter size={12} />
-                    </ActionIcon>
-                  </MantineTooltip>
-                  <MantineTooltip
-                    label="Exclude this value"
-                    position="top"
-                    withArrow
-                    fz="xs"
-                    zIndex={10000}
+                    <IconFilter size={12} />
+                  </DBRowTableIconButton>
+                  <DBRowTableIconButton
+                    variant="copy"
+                    title="Exclude this value"
+                    onClick={() => {
+                      onAddFilter(name, clickedBar.value, 'exclude');
+                      setClickedBar(null);
+                    }}
                   >
-                    <ActionIcon
-                      variant="secondary"
-                      size="xs"
-                      onClick={() => {
-                        onAddFilter(name, clickedBar.value, 'exclude');
-                        setClickedBar(null);
-                      }}
-                    >
-                      <IconFilterX size={12} />
-                    </ActionIcon>
-                  </MantineTooltip>
+                    <IconFilterX size={12} />
+                  </DBRowTableIconButton>
                 </>
               )}
-              <MantineTooltip
-                label={copiedValue ? 'Copied!' : 'Copy value'}
-                position="top"
-                withArrow
-                fz="xs"
-                zIndex={10000}
+              <DBRowTableIconButton
+                variant="copy"
+                title={copiedValue ? 'Copied!' : 'Copy value'}
+                isActive={copiedValue}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(clickedBar.value);
+                    setCopiedValue(true);
+                    setTimeout(() => setCopiedValue(false), 2000);
+                  } catch (err) {
+                    console.error('Failed to copy:', err);
+                  }
+                }}
               >
-                <ActionIcon
-                  variant="secondary"
-                  size="xs"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(clickedBar.value);
-                      setCopiedValue(true);
-                      setTimeout(() => setCopiedValue(false), 2000);
-                    } catch (e) {
-                      console.error('Failed to copy:', e);
-                    }
-                  }}
-                  color={copiedValue ? 'green' : undefined}
-                >
-                  {copiedValue ? (
-                    <IconCheck size={12} />
-                  ) : (
-                    <IconCopy size={12} />
-                  )}
-                </ActionIcon>
-              </MantineTooltip>
+                <IconCopy size={12} />
+              </DBRowTableIconButton>
             </Flex>
           </div>,
           document.body,
