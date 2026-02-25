@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { withErrorBoundary } from 'react-error-boundary';
 import {
   Bar,
@@ -14,8 +14,23 @@ import {
   ChartConfigWithOptDateRange,
   Filter,
 } from '@hyperdx/common-utils/dist/types';
-import { Box, Code, Container, Flex, Pagination, Text } from '@mantine/core';
+import {
+  ActionIcon,
+  Box,
+  Code,
+  Container,
+  Flex,
+  Pagination,
+  Text,
+  Tooltip as MantineTooltip,
+} from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
+import {
+  IconCheck,
+  IconCopy,
+  IconFilter,
+  IconFilterX,
+} from '@tabler/icons-react';
 
 import { isAggregateFunction } from '@/ChartUtils';
 import { useQueriedChartConfig } from '@/hooks/useChartConfig';
@@ -31,7 +46,7 @@ import { SQLPreview } from './ChartSQLPreview';
 import styles from '../../styles/HDXLineChart.module.scss';
 
 /*
- * Response Data is like... 
+ * Response Data is like...
 {
   Timestamp: "",
   Map: {
@@ -155,12 +170,42 @@ function mergeValueStatisticsMaps(
   return mergedArray;
 }
 
+export type AddFilterFn = (
+  property: string,
+  value: string,
+  action?: 'only' | 'exclude' | 'include',
+) => void;
+
 const HDXBarChartTooltip = withErrorBoundary(
   memo((props: any) => {
-    const { active, payload, label, title } = props;
+    const {
+      active,
+      payload,
+      label,
+      title,
+      onAddFilter,
+      onMouseEnter,
+      onMouseLeave,
+    } = props;
+    const [isCopied, setIsCopied] = useState(false);
+
     if (active && payload && payload.length) {
+      const copyValue = async () => {
+        try {
+          await navigator.clipboard.writeText(String(label ?? ''));
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000);
+        } catch (e) {
+          console.error('Failed to copy:', e);
+        }
+      };
+
       return (
-        <div className={styles.chartTooltip}>
+        <div
+          className={styles.chartTooltip}
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
+        >
           <div className={styles.chartTooltipContent}>
             {title && (
               <Text size="xs" mb="xs">
@@ -177,6 +222,59 @@ const HDXBarChartTooltip = withErrorBoundary(
                   {p.name}: {p.value.toFixed(2)}%
                 </div>
               ))}
+            <Flex gap={4} mt={6}>
+              <MantineTooltip
+                label={isCopied ? 'Copied!' : 'Copy value'}
+                position="top"
+                withArrow
+                fz="xs"
+              >
+                <ActionIcon
+                  variant="subtle"
+                  size="xs"
+                  onClick={copyValue}
+                  color={isCopied ? 'green' : undefined}
+                >
+                  {isCopied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+                </ActionIcon>
+              </MantineTooltip>
+              {onAddFilter && (
+                <>
+                  <MantineTooltip
+                    label="Filter for this value"
+                    position="top"
+                    withArrow
+                    fz="xs"
+                  >
+                    <ActionIcon
+                      variant="subtle"
+                      size="xs"
+                      onClick={() =>
+                        onAddFilter(title, String(label ?? ''), 'include')
+                      }
+                    >
+                      <IconFilter size={12} />
+                    </ActionIcon>
+                  </MantineTooltip>
+                  <MantineTooltip
+                    label="Exclude this value"
+                    position="top"
+                    withArrow
+                    fz="xs"
+                  >
+                    <ActionIcon
+                      variant="subtle"
+                      size="xs"
+                      onClick={() =>
+                        onAddFilter(title, String(label ?? ''), 'exclude')
+                      }
+                    >
+                      <IconFilterX size={12} />
+                    </ActionIcon>
+                  </MantineTooltip>
+                </>
+              )}
+            </Flex>
           </div>
         </div>
       );
@@ -197,14 +295,58 @@ function PropertyComparisonChart({
   name,
   outlierValueOccurences,
   inlierValueOccurences,
+  onAddFilter,
 }: {
   name: string;
   outlierValueOccurences: Map<string, number>;
   inlierValueOccurences: Map<string, number>;
+  onAddFilter?: AddFilterFn;
 }) {
   const mergedValueStatistics = mergeValueStatisticsMaps(
     outlierValueOccurences,
     inlierValueOccurences,
+  );
+
+  // Controlled tooltip state - keeps tooltip open while hovering over action buttons
+  const [tooltipState, setTooltipState] = useState<{
+    active: boolean;
+    label: string;
+    payload: any[];
+  }>({ active: false, label: '', payload: [] });
+  const tooltipHideTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (tooltipHideTimeoutRef.current) {
+        clearTimeout(tooltipHideTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const keepTooltipOpen = useCallback(() => {
+    if (tooltipHideTimeoutRef.current) {
+      clearTimeout(tooltipHideTimeoutRef.current);
+    }
+  }, []);
+
+  const scheduleTooltipClose = useCallback(() => {
+    tooltipHideTimeoutRef.current = setTimeout(() => {
+      setTooltipState(prev => ({ ...prev, active: false }));
+    }, 150);
+  }, []);
+
+  const handleChartMouseMove = useCallback(
+    (state: any) => {
+      if (state.isTooltipActive) {
+        keepTooltipOpen();
+        setTooltipState({
+          active: true,
+          label: state.activeLabel ?? '',
+          payload: state.activePayload ?? [],
+        });
+      }
+    },
+    [keepTooltipOpen],
   );
 
   return (
@@ -224,6 +366,8 @@ function PropertyComparisonChart({
             left: 0,
             bottom: 0,
           }}
+          onMouseMove={handleChartMouseMove}
+          onMouseLeave={scheduleTooltipClose}
         >
           {/* <CartesianGrid strokeDasharray="3 3" /> */}
           <XAxis
@@ -234,10 +378,18 @@ function PropertyComparisonChart({
             tick={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
           />
           <Tooltip
-            wrapperStyle={{
-              zIndex: 1000,
-            }}
-            content={<HDXBarChartTooltip title={name} />}
+            active={tooltipState.active}
+            payload={tooltipState.payload}
+            label={tooltipState.label}
+            wrapperStyle={{ pointerEvents: 'auto', zIndex: 1000 }}
+            content={
+              <HDXBarChartTooltip
+                title={name}
+                onAddFilter={onAddFilter}
+                onMouseEnter={keepTooltipOpen}
+                onMouseLeave={scheduleTooltipClose}
+              />
+            }
             allowEscapeViewBox={{ y: true }}
           />
           <Bar
@@ -277,6 +429,7 @@ export default function DBDeltaChart({
   xMax,
   yMin,
   yMax,
+  onAddFilter,
 }: {
   config: ChartConfigWithDateRange;
   valueExpr: string;
@@ -284,6 +437,7 @@ export default function DBDeltaChart({
   xMax: number;
   yMin: number;
   yMax: number;
+  onAddFilter?: AddFilterFn;
 }) {
   // Determine if the value expression uses aggregate functions
   const isAggregate = isAggregateFunction(valueExpr);
@@ -577,6 +731,7 @@ export default function DBDeltaChart({
               inlierValueOccurences={
                 inlierValueOccurences.get(property) ?? new Map()
               }
+              onAddFilter={onAddFilter}
               key={property}
             />
           ))}

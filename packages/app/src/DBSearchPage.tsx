@@ -1900,6 +1900,7 @@ function DBSearchPage() {
                   }}
                   isReady={isReady}
                   source={searchedSource}
+                  onAddFilter={searchFilters.setFilterValue}
                 />
               )}
               <Flex direction="column" mih="0">

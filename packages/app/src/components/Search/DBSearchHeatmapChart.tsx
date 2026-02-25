@@ -21,7 +21,7 @@ import { IconPlayerPlay } from '@tabler/icons-react';
 
 import { getDurationMsExpression } from '@/source';
 
-import DBDeltaChart from '../DBDeltaChart';
+import DBDeltaChart, { AddFilterFn } from '../DBDeltaChart';
 import DBHeatmapChart from '../DBHeatmapChart';
 import { SQLInlineEditorControlled } from '../SQLInlineEditor';
 
@@ -34,10 +34,12 @@ export function DBSearchHeatmapChart({
   chartConfig,
   source,
   isReady,
+  onAddFilter,
 }: {
   chartConfig: ChartConfigWithDateRange;
   source: TSource;
   isReady: boolean;
+  onAddFilter?: AddFilterFn;
 }) {
   const [fields, setFields] = useQueryStates({
     value: parseAsString.withDefault(getDurationMsExpression(source)),
@@ -120,6 +122,7 @@ export function DBSearchHeatmapChart({
           xMax={fields.xMax}
           yMin={fields.yMin}
           yMax={fields.yMax}
+          onAddFilter={onAddFilter}
         />
       ) : (
         <Paper shadow="xs" p="xl" h="100%">
