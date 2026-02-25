@@ -145,7 +145,7 @@ COPY --from=migrate-builder /migrate /usr/local/bin/migrate
 RUN echo 'http://dl-cdn.alpinelinux.org/alpine/v3.9/main' >> /etc/apk/repositories && \
   echo 'http://dl-cdn.alpinelinux.org/alpine/v3.9/community' >> /etc/apk/repositories && \
   apk update && \
-  apk add --no-cache mongodb yaml-cpp=0.6.2-r2 ca-certificates su-exec && \
+  apk add --no-cache mongodb yaml-cpp=0.6.2-r2 ca-certificates && \
   apk add --no-cache --upgrade curl busybox && \
   addgroup -S -g ${USER_GID} otel && \
   adduser  -S -u ${USER_UID} -G otel otel && \
@@ -158,8 +158,8 @@ RUN echo 'http://dl-cdn.alpinelinux.org/alpine/v3.9/main' >> /etc/apk/repositori
 
 ENV NODE_ENV=production
 
-# Set up App (copy from prod stage, chown to otel so su-exec otel can write if needed)
-COPY --from=prod --chown=${USER_UID}:${USER_GID} /app /app
+# Set up App
+COPY --from=prod /app /app
 COPY --from=hyperdx ./entry.local.base.sh /etc/local/entry.base.sh
 
 # Copy VEX exception files for Docker Scout vulnerability suppression
