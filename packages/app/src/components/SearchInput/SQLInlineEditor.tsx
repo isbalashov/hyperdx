@@ -463,7 +463,7 @@ export default function SQLInlineEditor({
             <Tooltip label={tooltipText} disabled={!tooltipText}>
               <Flex align="center" gap={2}>
                 {label}
-                {tooltipText && <IconInfoCircle size={20} />}
+                {tooltipText && <IconInfoCircle size={16} />}
               </Flex>
             </Tooltip>
           </Text>

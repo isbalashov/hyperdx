@@ -157,38 +157,34 @@ function DBSearchHeatmapForm({
       style={{ position: 'relative' }}
     >
       <Flex m="0" mb="xs" align="stretch" gap="xs">
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <SQLInlineEditorControlled
-            parentRef={parentRef}
-            tableConnection={connection}
-            control={form.control}
-            name="value"
-            size="xs"
-            tooltipText="Controls the Y axis range and scale — defines the metric plotted vertically."
-            placeholder="SQL expression"
-            language="sql"
-            onSubmit={form.handleSubmit(onSubmit)}
-            label="Value"
-            error={form.formState.errors.value?.message}
-            rules={{ required: true }}
-          />
-        </div>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <SQLInlineEditorControlled
-            parentRef={parentRef}
-            tableConnection={connection}
-            control={form.control}
-            name="count"
-            placeholder="SQL expression"
-            language="sql"
-            size="xs"
-            tooltipText="Controls the color intensity (Z axis) — shows how frequently or strongly each value occurs."
-            onSubmit={form.handleSubmit(onSubmit)}
-            label="Count"
-            error={form.formState.errors.count?.message}
-            rules={{ required: true }}
-          />
-        </div>
+        <SQLInlineEditorControlled
+          parentRef={parentRef}
+          tableConnection={connection}
+          control={form.control}
+          name="value"
+          size="xs"
+          tooltipText="Controls the Y axis range and scale — defines the metric plotted vertically."
+          placeholder="SQL expression"
+          language="sql"
+          onSubmit={form.handleSubmit(onSubmit)}
+          label="Value"
+          error={form.formState.errors.value?.message}
+          rules={{ required: true }}
+        />
+        <SQLInlineEditorControlled
+          parentRef={parentRef}
+          tableConnection={connection}
+          control={form.control}
+          name="count"
+          placeholder="SQL expression"
+          language="sql"
+          size="xs"
+          tooltipText="Controls the color intensity (Z axis) — shows how frequently or strongly each value occurs."
+          onSubmit={form.handleSubmit(onSubmit)}
+          label="Count"
+          error={form.formState.errors.count?.message}
+          rules={{ required: true }}
+        />
         <ActionIcon
           w="40px"
           variant="primary"
