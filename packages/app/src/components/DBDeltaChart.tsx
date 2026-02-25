@@ -110,6 +110,119 @@ export function flattenedKeyToSqlExpression(
   return key;
 }
 
+/**
+ * Returns true if the field is a structural ID field that should always be hidden.
+ *
+ * Matches:
+ *   - Top-level String columns whose name ends in "Id" or "ID" (e.g., TraceId, SpanId)
+ *   - Array(String) column elements or plain column references whose name ends in
+ *     "Id" or "ID" (e.g., Links.TraceId[0] from a Links.TraceId Array(String) column)
+ */
+export function isIdField(
+  key: string,
+  columnMeta: { name: string; type: string }[],
+): boolean {
+  // Extract base column name:
+  //   "ColName[N]" → colName is "ColName"
+  //   "ColName" (no brackets) → colName is the key itself
+  //   "ColName[N].subkey" → has brackets but doesn't end with ], skip
+  const arrMatch = key.match(/^([^\[]+)\[(\d+)\]$/);
+  const colName = arrMatch ? arrMatch[1] : key.includes('[') ? null : key;
+  if (!colName) return false;
+  if (!/(Id|ID)$/.test(colName)) return false;
+
+  const col = columnMeta.find(c => c.name === colName);
+  if (!col) return false;
+  const baseType = stripTypeWrappers(col.type);
+  if (baseType === 'String') return true;
+  if (baseType.startsWith('Array(')) {
+    const innerType = stripTypeWrappers(baseType.slice('Array('.length, -1));
+    return innerType === 'String';
+  }
+  return false;
+}
+
+/**
+ * Returns true if the field is a per-index timestamp array element (e.g.,
+ * Events.Timestamp[0]) from a column of type Array(DateTime64(...)), or the
+ * plain column reference itself (e.g., Events.Timestamp).
+ */
+export function isTimestampArrayField(
+  key: string,
+  columnMeta: { name: string; type: string }[],
+): boolean {
+  const arrMatch = key.match(/^([^\[]+)\[(\d+)\]$/);
+  const colName = arrMatch ? arrMatch[1] : key.includes('[') ? null : key;
+  if (!colName) return false;
+
+  const col = columnMeta.find(c => c.name === colName);
+  if (!col) return false;
+  const baseType = stripTypeWrappers(col.type);
+  if (!baseType.startsWith('Array(')) return false;
+  const innerType = stripTypeWrappers(baseType.slice('Array('.length, -1));
+  return innerType.startsWith('DateTime64(');
+}
+
+/**
+ * Returns true if the field should always be hidden per the structural denylist:
+ *   - ID fields (TraceId, SpanId, ParentSpanId, Links.TraceId[N], Links.SpanId[N], etc.)
+ *   - Per-index timestamp array elements (Events.Timestamp[N], Links.Timestamp[N], etc.)
+ */
+export function isDenylisted(
+  key: string,
+  columnMeta: { name: string; type: string }[],
+): boolean {
+  return isIdField(key, columnMeta) || isTimestampArrayField(key, columnMeta);
+}
+
+/**
+ * Returns true if the field should be hidden due to high cardinality (most values are
+ * unique, meaning it provides little analytical value in the comparison view).
+ *
+ * Takes the percentage occurrence maps (value → percentage 0–100) produced by
+ * getPropertyStatistics, and the raw property occurrence counts. Unique value count is
+ * derived from the map's size.
+ *
+ * A field is considered high cardinality when:
+ *   min(outlierUniqueness, inlierUniqueness) > 0.9 AND combined sample size > 20
+ *
+ * "min" ensures that if either group clusters (low cardinality), the field is kept visible.
+ * If only one group has data, that group's uniqueness alone is used.
+ */
+export function isHighCardinality(
+  key: string,
+  outlierValueOccurences: Map<string, Map<string, number>>,
+  inlierValueOccurences: Map<string, Map<string, number>>,
+  outlierPropertyOccurences: Map<string, number>,
+  inlierPropertyOccurences: Map<string, number>,
+): boolean {
+  const outlierTotal = outlierPropertyOccurences.get(key) ?? 0;
+  const inlierTotal = inlierPropertyOccurences.get(key) ?? 0;
+  const combinedSampleSize = outlierTotal + inlierTotal;
+  if (combinedSampleSize <= 20) return false;
+
+  const outlierUniqueValues = outlierValueOccurences.get(key)?.size ?? 0;
+  const inlierUniqueValues = inlierValueOccurences.get(key)?.size ?? 0;
+
+  const outlierUniqueness =
+    outlierTotal > 0 ? outlierUniqueValues / outlierTotal : null;
+  const inlierUniqueness =
+    inlierTotal > 0 ? inlierUniqueValues / inlierTotal : null;
+
+  let effectiveUniqueness: number;
+  if (outlierUniqueness !== null && inlierUniqueness !== null) {
+    effectiveUniqueness = Math.min(outlierUniqueness, inlierUniqueness);
+  } else if (outlierUniqueness !== null) {
+    effectiveUniqueness = outlierUniqueness;
+  } else if (inlierUniqueness !== null) {
+    effectiveUniqueness = inlierUniqueness;
+  } else {
+    return false;
+  }
+
+  return effectiveUniqueness > 0.9;
+}
+
 /*
  * Response Data is like...
 {
@@ -200,10 +313,8 @@ function getPropertyStatistics(data: Record<string, any>[]) {
   });
 
   return {
-    // valueOccurences,
     percentageOccurences,
-    // commonProperties,
-    // propertyOccurences,
+    propertyOccurences,
   };
 }
 
@@ -475,6 +586,120 @@ function PropertyComparisonChart({
   );
 }
 
+type HiddenProperty = {
+  key: string;
+  reason: 'denylist' | 'cardinality';
+  uniqueValues: number;
+};
+
+function HiddenFieldsSection({
+  hiddenProperties,
+  outlierValueOccurences,
+  inlierValueOccurences,
+  onAddFilter,
+}: {
+  hiddenProperties: HiddenProperty[];
+  outlierValueOccurences: Map<string, Map<string, number>>;
+  inlierValueOccurences: Map<string, Map<string, number>>;
+  onAddFilter?: AddFilterFn;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [expandedCharts, setExpandedCharts] = useState<Set<string>>(new Set());
+
+  if (hiddenProperties.length === 0) return null;
+
+  const toggleChart = (key: string) => {
+    setExpandedCharts(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const previewNames = hiddenProperties
+    .slice(0, 5)
+    .map(f => f.key)
+    .join(' · ');
+  const hasMorePreview = hiddenProperties.length > 5;
+
+  return (
+    <Box
+      mt="sm"
+      pt="xs"
+      style={{ borderTop: '1px solid var(--mantine-color-dark-4)' }}
+    >
+      <Box
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setIsExpanded(prev => !prev)}
+      >
+        <Text size="xs" c="dimmed">
+          {isExpanded ? '▼' : '▶'} {hiddenProperties.length} hidden fields
+          (high cardinality)
+        </Text>
+        {!isExpanded && (
+          <Text size="xs" c="dimmed" ml="xs" style={{ fontStyle: 'italic' }}>
+            {previewNames}
+            {hasMorePreview ? ' ...' : ''}
+          </Text>
+        )}
+      </Box>
+      {isExpanded && (
+        <Box mt="xs">
+          {hiddenProperties.map(({ key, uniqueValues }) => (
+            <Box key={key} mb={6}>
+              <Flex align="center" justify="space-between" gap="xs">
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  style={{
+                    fontFamily: 'IBM Plex Mono, monospace',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                  }}
+                  title={key}
+                >
+                  {key}
+                </Text>
+                <Flex align="center" gap="xs" style={{ flexShrink: 0 }}>
+                  <Text size="xs" c="dimmed">
+                    — {uniqueValues} unique values
+                  </Text>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => toggleChart(key)}
+                  >
+                    {expandedCharts.has(key) ? 'Hide chart' : 'Show chart'}
+                  </Text>
+                </Flex>
+              </Flex>
+              {expandedCharts.has(key) && (
+                <PropertyComparisonChart
+                  name={key}
+                  outlierValueOccurences={
+                    outlierValueOccurences.get(key) ?? new Map()
+                  }
+                  inlierValueOccurences={
+                    inlierValueOccurences.get(key) ?? new Map()
+                  }
+                  onAddFilter={onAddFilter}
+                />
+              )}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // Layout constants for dynamic grid calculation.
 // CHART_WIDTH is the minimum chart width used to determine how many columns fit; actual rendered
 // width expands to fill the container (charts use width: '100%' inside a CSS grid).
@@ -658,63 +883,102 @@ export default function DBDeltaChart({
     limit: { limit: 1000 },
   });
 
-  // TODO: Is loading state
-  const { sortedProperties, outlierValueOccurences, inlierValueOccurences } =
-    useMemo(() => {
-      const { percentageOccurences: outlierValueOccurences } =
-        getPropertyStatistics(outlierData?.data ?? []);
+  // Compute column metadata, property statistics, sorted/visible/hidden property lists.
+  // columnMeta is merged here (instead of a separate useMemo) so the denylist and
+  // cardinality checks can reference it during the same memoization pass.
+  const {
+    sortedProperties,
+    outlierValueOccurences,
+    inlierValueOccurences,
+    columnMeta,
+    visibleProperties,
+    hiddenProperties,
+  } = useMemo(() => {
+    const columnMeta = (outlierData?.meta ?? inlierData?.meta ?? []) as {
+      name: string;
+      type: string;
+    }[];
 
-      const { percentageOccurences: inlierValueOccurences } =
-        getPropertyStatistics(inlierData?.data ?? []);
+    const {
+      percentageOccurences: outlierValueOccurences,
+      propertyOccurences: outlierPropertyOccurences,
+    } = getPropertyStatistics(outlierData?.data ?? []);
 
-      // Get all the unique keys from the outliers
-      let uniqueKeys = new Set([...outlierValueOccurences.keys()]);
-      // If there's no outliers, use inliers as the unique keys
-      if (uniqueKeys.size === 0) {
-        uniqueKeys = new Set([...inlierValueOccurences.keys()]);
+    const {
+      percentageOccurences: inlierValueOccurences,
+      propertyOccurences: inlierPropertyOccurences,
+    } = getPropertyStatistics(inlierData?.data ?? []);
+
+    // Get all the unique keys from the outliers
+    let uniqueKeys = new Set([...outlierValueOccurences.keys()]);
+    // If there's no outliers, use inliers as the unique keys
+    if (uniqueKeys.size === 0) {
+      uniqueKeys = new Set([...inlierValueOccurences.keys()]);
+    }
+    // Now process the keys to find the ones with the highest delta between outlier and inlier percentages
+    const sortedProperties = Array.from(uniqueKeys)
+      .map(key => {
+        const inlierCount =
+          inlierValueOccurences.get(key) ?? new Map<string, number>();
+        const outlierCount =
+          outlierValueOccurences.get(key) ?? new Map<string, number>();
+
+        const mergedArray = mergeValueStatisticsMaps(
+          outlierCount,
+          inlierCount,
+        );
+        let maxValueDelta = 0;
+        mergedArray.forEach(item => {
+          const delta = Math.abs(item.outlierCount - item.inlierCount);
+          if (delta > maxValueDelta) {
+            maxValueDelta = delta;
+          }
+        });
+
+        return [key, maxValueDelta] as const;
+      })
+      .sort((a, b) => b[1] - a[1])
+      .map(a => a[0]);
+
+    // Split properties into visible (shown in charts) and hidden (denylist or high cardinality)
+    const visibleProperties: string[] = [];
+    const hiddenProperties: HiddenProperty[] = [];
+
+    sortedProperties.forEach(key => {
+      if (isDenylisted(key, columnMeta)) {
+        const uniqueValues = Math.max(
+          outlierValueOccurences.get(key)?.size ?? 0,
+          inlierValueOccurences.get(key)?.size ?? 0,
+        );
+        hiddenProperties.push({ key, reason: 'denylist', uniqueValues });
+      } else if (
+        isHighCardinality(
+          key,
+          outlierValueOccurences,
+          inlierValueOccurences,
+          outlierPropertyOccurences,
+          inlierPropertyOccurences,
+        )
+      ) {
+        const uniqueValues = Math.max(
+          outlierValueOccurences.get(key)?.size ?? 0,
+          inlierValueOccurences.get(key)?.size ?? 0,
+        );
+        hiddenProperties.push({ key, reason: 'cardinality', uniqueValues });
+      } else {
+        visibleProperties.push(key);
       }
-      // Now process the keys to find the ones with the highest delta between outlier and inlier percentages
-      const sortedProperties = Array.from(uniqueKeys)
-        .map(key => {
-          const inlierCount =
-            inlierValueOccurences.get(key) ?? new Map<string, number>();
-          const outlierCount =
-            outlierValueOccurences.get(key) ?? new Map<string, number>();
+    });
 
-          const mergedArray = mergeValueStatisticsMaps(
-            outlierCount,
-            inlierCount,
-          );
-          let maxValueDelta = 0;
-          mergedArray.forEach(item => {
-            const delta = Math.abs(item.outlierCount - item.inlierCount);
-            if (delta > maxValueDelta) {
-              maxValueDelta = delta;
-            }
-          });
-
-          return [key, maxValueDelta] as const;
-        })
-        .sort((a, b) => b[1] - a[1])
-        .map(a => a[0]);
-
-      return {
-        sortedProperties,
-        outlierValueOccurences,
-        inlierValueOccurences,
-      };
-    }, [outlierData?.data, inlierData?.data]);
-
-  // Build column metadata map from query results to enable correct SQL expression
-  // generation when converting flattened property keys to filter expressions.
-  const columnMeta = useMemo(
-    () =>
-      (outlierData?.meta ?? inlierData?.meta ?? []) as {
-        name: string;
-        type: string;
-      }[],
-    [outlierData?.meta, inlierData?.meta],
-  );
+    return {
+      sortedProperties,
+      outlierValueOccurences,
+      inlierValueOccurences,
+      columnMeta,
+      visibleProperties,
+      hiddenProperties,
+    };
+  }, [outlierData, inlierData]);
 
   // Wrap onAddFilter to convert flattened dot-notation keys (from flattenData)
   // into valid ClickHouse SQL expressions before passing to the filter handler.
@@ -790,14 +1054,15 @@ export default function DBDeltaChart({
     );
   }
 
-  const totalPages = Math.ceil(sortedProperties.length / PAGE_SIZE);
+  const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE);
 
   return (
     <Box
       ref={containerRef}
       p="md"
       style={{
-        overflow: 'hidden',
+        overflowX: 'hidden',
+        overflowY: 'auto',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -810,7 +1075,7 @@ export default function DBDeltaChart({
           gap: CHART_GAP,
         }}
       >
-        {sortedProperties
+        {visibleProperties
           .slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE)
           .map(property => (
             <PropertyComparisonChart
@@ -827,20 +1092,36 @@ export default function DBDeltaChart({
           ))}
       </div>
       <Flex
-        justify="flex-end"
+        justify="space-between"
+        align="center"
         style={{
           marginTop: 'auto',
           paddingTop: CHART_GAP,
-          visibility: totalPages > 1 ? 'visible' : 'hidden',
+          visibility:
+            totalPages > 1 || hiddenProperties.length > 0
+              ? 'visible'
+              : 'hidden',
         }}
       >
+        <Text size="xs" c="dimmed">
+          {hiddenProperties.length > 0
+            ? `Showing ${visibleProperties.length} of ${sortedProperties.length} fields`
+            : ' '}
+        </Text>
         <Pagination
           size="xs"
           value={activePage}
           onChange={setPage}
           total={totalPages}
+          style={{ visibility: totalPages > 1 ? 'visible' : 'hidden' }}
         />
       </Flex>
+      <HiddenFieldsSection
+        hiddenProperties={hiddenProperties}
+        outlierValueOccurences={outlierValueOccurences}
+        inlierValueOccurences={inlierValueOccurences}
+        onAddFilter={onAddFilter ? handleAddFilter : undefined}
+      />
     </Box>
   );
 }
