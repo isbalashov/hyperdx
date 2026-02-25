@@ -13,14 +13,13 @@ export const HDX_DISABLE_METADATA_FIELD_FETCH = env(
 );
 
 export const NODE_ENV = process.env.NODE_ENV as string;
-export const HDX_API_KEY = process.env.HYPERDX_API_KEY as string; // for nextjs server
+export const HDX_API_KEY = env('HYPERDX_API_KEY'); // for nextjs server
 export const HDX_SERVICE_NAME =
-  process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME ?? 'hdx-oss-dev-app';
+  env('NEXT_PUBLIC_OTEL_SERVICE_NAME') ?? 'hdx-oss-dev-app';
 export const HDX_EXPORTER_ENABLED =
-  (process.env.HDX_EXPORTER_ENABLED ?? 'true') === 'true';
+  (env('HDX_EXPORTER_ENABLED') ?? 'true') === 'true';
 export const HDX_COLLECTOR_URL =
-  process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT ??
-  'http://localhost:4318';
+  env('NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT') ?? 'http://localhost:4318';
 export const IS_CI = NODE_ENV === 'ci';
 export const IS_DEV = NODE_ENV === 'development';
 export const IS_PROD = NODE_ENV === 'production';
