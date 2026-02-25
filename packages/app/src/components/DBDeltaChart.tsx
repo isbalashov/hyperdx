@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { withErrorBoundary } from 'react-error-boundary';
 import {
@@ -473,6 +474,17 @@ function PropertyComparisonChart({
   );
   const chartData = applyTopNAggregation(mergedValueStatistics);
 
+  const totalOutliers = useMemo(
+    () =>
+      Array.from(outlierValueOccurences.values()).reduce((a, b) => a + b, 0),
+    [outlierValueOccurences],
+  );
+  const totalInliers = useMemo(
+    () =>
+      Array.from(inlierValueOccurences.values()).reduce((a, b) => a + b, 0),
+    [inlierValueOccurences],
+  );
+
   const [clickedBar, setClickedBar] = useState<{
     value: string;
     clientX: number;
@@ -579,96 +591,137 @@ function PropertyComparisonChart({
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      {clickedBar && (
-        <div
-          ref={popoverRef}
-          style={{
-            position: 'fixed',
-            left: clickedBar.clientX,
-            top: clickedBar.clientY - 8,
-            transform: 'translate(-50%, -100%)',
-            zIndex: 1050,
-            background: 'var(--mantine-color-dark-7)',
-            border: '1px solid var(--mantine-color-dark-4)',
-            borderRadius: 4,
-            padding: '8px 12px',
-            minWidth: 180,
-            maxWidth: 300,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-          }}
-        >
-          <Text size="xs" mb="xs" style={{ wordBreak: 'break-all' }}>
-            {clickedBar.value.length === 0 ? (
-              <i>Empty String</i>
-            ) : (
-              clickedBar.value
-            )}
-          </Text>
-          <Flex gap={4} align="center">
-            {onAddFilter && (
-              <>
-                <MantineTooltip
-                  label="Filter for this value"
-                  position="top"
-                  withArrow
-                  fz="xs"
-                >
-                  <ActionIcon
-                    variant="primary"
-                    size="xs"
-                    onClick={() => {
-                      onAddFilter(name, clickedBar.value, 'include');
-                      setClickedBar(null);
-                    }}
-                  >
-                    <IconFilter size={12} />
-                  </ActionIcon>
-                </MantineTooltip>
-                <MantineTooltip
-                  label="Exclude this value"
-                  position="top"
-                  withArrow
-                  fz="xs"
-                >
-                  <ActionIcon
-                    variant="secondary"
-                    size="xs"
-                    onClick={() => {
-                      onAddFilter(name, clickedBar.value, 'exclude');
-                      setClickedBar(null);
-                    }}
-                  >
-                    <IconFilterX size={12} />
-                  </ActionIcon>
-                </MantineTooltip>
-              </>
-            )}
-            <MantineTooltip
-              label={copiedValue ? 'Copied!' : 'Copy value'}
-              position="top"
-              withArrow
-              fz="xs"
+      {clickedBar &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className={styles.chartTooltip}
+            style={{
+              position: 'fixed',
+              left: clickedBar.clientX,
+              top: clickedBar.clientY - 8,
+              transform: 'translate(-50%, -100%)',
+              zIndex: 9999,
+              borderRadius: 4,
+              padding: '8px 12px',
+              minWidth: 200,
+              maxWidth: 320,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            }}
+          >
+            <Text
+              size="xs"
+              c="dimmed"
+              fw={600}
+              mb={4}
+              style={{ wordBreak: 'break-all' }}
+              title={name}
             >
-              <ActionIcon
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(clickedBar.value);
-                    setCopiedValue(true);
-                    setTimeout(() => setCopiedValue(false), 2000);
-                  } catch (e) {
-                    console.error('Failed to copy:', e);
-                  }
-                }}
-                color={copiedValue ? 'green' : undefined}
+              {truncateMiddle(name, 40)}
+            </Text>
+            <Text size="xs" mb={6} style={{ wordBreak: 'break-all' }}>
+              {clickedBar.value.length === 0 ? (
+                <i>Empty String</i>
+              ) : (
+                clickedBar.value
+              )}
+            </Text>
+            {(() => {
+              const outlierCount =
+                outlierValueOccurences.get(clickedBar.value) ?? 0;
+              const inlierCount =
+                inlierValueOccurences.get(clickedBar.value) ?? 0;
+              const outlierPct =
+                totalOutliers > 0
+                  ? ((outlierCount / totalOutliers) * 100).toFixed(1)
+                  : null;
+              const inlierPct =
+                totalInliers > 0
+                  ? ((inlierCount / totalInliers) * 100).toFixed(1)
+                  : null;
+              return (
+                <Flex gap={12} mb={8}>
+                  <Text size="xs" c={getChartColorError()}>
+                    Outliers: {outlierCount}
+                    {outlierPct != null ? ` (${outlierPct}%)` : ''}
+                  </Text>
+                  <Text size="xs" c={getChartColorSuccess()}>
+                    Inliers: {inlierCount}
+                    {inlierPct != null ? ` (${inlierPct}%)` : ''}
+                  </Text>
+                </Flex>
+              );
+            })()}
+            <Flex gap={4} align="center">
+              {onAddFilter && (
+                <>
+                  <MantineTooltip
+                    label="Filter for this value"
+                    position="top"
+                    withArrow
+                    fz="xs"
+                  >
+                    <ActionIcon
+                      variant="primary"
+                      size="xs"
+                      onClick={() => {
+                        onAddFilter(name, clickedBar.value, 'include');
+                        setClickedBar(null);
+                      }}
+                    >
+                      <IconFilter size={12} />
+                    </ActionIcon>
+                  </MantineTooltip>
+                  <MantineTooltip
+                    label="Exclude this value"
+                    position="top"
+                    withArrow
+                    fz="xs"
+                  >
+                    <ActionIcon
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => {
+                        onAddFilter(name, clickedBar.value, 'exclude');
+                        setClickedBar(null);
+                      }}
+                    >
+                      <IconFilterX size={12} />
+                    </ActionIcon>
+                  </MantineTooltip>
+                </>
+              )}
+              <MantineTooltip
+                label={copiedValue ? 'Copied!' : 'Copy value'}
+                position="top"
+                withArrow
+                fz="xs"
               >
-                {copiedValue ? <IconCheck size={12} /> : <IconCopy size={12} />}
-              </ActionIcon>
-            </MantineTooltip>
-          </Flex>
-        </div>
-      )}
+                <ActionIcon
+                  variant="secondary"
+                  size="xs"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(clickedBar.value);
+                      setCopiedValue(true);
+                      setTimeout(() => setCopiedValue(false), 2000);
+                    } catch (e) {
+                      console.error('Failed to copy:', e);
+                    }
+                  }}
+                  color={copiedValue ? 'green' : undefined}
+                >
+                  {copiedValue ? (
+                    <IconCheck size={12} />
+                  ) : (
+                    <IconCopy size={12} />
+                  )}
+                </ActionIcon>
+              </MantineTooltip>
+            </Flex>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

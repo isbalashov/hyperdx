@@ -106,6 +106,19 @@ export function DBSearchHeatmapChart({
               yMax,
             });
           }}
+          initialSelection={
+            fields.xMin != null &&
+            fields.xMax != null &&
+            fields.yMin != null &&
+            fields.yMax != null
+              ? {
+                  xMin: fields.xMin,
+                  xMax: fields.xMax,
+                  yMin: fields.yMin,
+                  yMax: fields.yMax,
+                }
+              : null
+          }
         />
       </div>
       {fields.xMin != null &&
