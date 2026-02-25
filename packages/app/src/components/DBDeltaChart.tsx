@@ -19,6 +19,7 @@ import {
   Box,
   Code,
   Container,
+  Divider,
   Flex,
   Pagination,
   Text,
@@ -586,120 +587,6 @@ function PropertyComparisonChart({
   );
 }
 
-type HiddenProperty = {
-  key: string;
-  reason: 'denylist' | 'cardinality';
-  uniqueValues: number;
-};
-
-function HiddenFieldsSection({
-  hiddenProperties,
-  outlierValueOccurences,
-  inlierValueOccurences,
-  onAddFilter,
-}: {
-  hiddenProperties: HiddenProperty[];
-  outlierValueOccurences: Map<string, Map<string, number>>;
-  inlierValueOccurences: Map<string, Map<string, number>>;
-  onAddFilter?: AddFilterFn;
-}) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [expandedCharts, setExpandedCharts] = useState<Set<string>>(new Set());
-
-  if (hiddenProperties.length === 0) return null;
-
-  const toggleChart = (key: string) => {
-    setExpandedCharts(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
-  const previewNames = hiddenProperties
-    .slice(0, 5)
-    .map(f => f.key)
-    .join(' · ');
-  const hasMorePreview = hiddenProperties.length > 5;
-
-  return (
-    <Box
-      mt="sm"
-      pt="xs"
-      style={{ borderTop: '1px solid var(--mantine-color-dark-4)' }}
-    >
-      <Box
-        style={{ cursor: 'pointer', userSelect: 'none' }}
-        onClick={() => setIsExpanded(prev => !prev)}
-      >
-        <Text size="xs" c="dimmed">
-          {isExpanded ? '▼' : '▶'} {hiddenProperties.length} hidden fields
-          (high cardinality)
-        </Text>
-        {!isExpanded && (
-          <Text size="xs" c="dimmed" ml="xs" style={{ fontStyle: 'italic' }}>
-            {previewNames}
-            {hasMorePreview ? ' ...' : ''}
-          </Text>
-        )}
-      </Box>
-      {isExpanded && (
-        <Box mt="xs">
-          {hiddenProperties.map(({ key, uniqueValues }) => (
-            <Box key={key} mb={6}>
-              <Flex align="center" justify="space-between" gap="xs">
-                <Text
-                  size="xs"
-                  c="dimmed"
-                  style={{
-                    fontFamily: 'IBM Plex Mono, monospace',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
-                  }}
-                  title={key}
-                >
-                  {key}
-                </Text>
-                <Flex align="center" gap="xs" style={{ flexShrink: 0 }}>
-                  <Text size="xs" c="dimmed">
-                    — {uniqueValues} unique values
-                  </Text>
-                  <Text
-                    size="xs"
-                    c="dimmed"
-                    style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                    onClick={() => toggleChart(key)}
-                  >
-                    {expandedCharts.has(key) ? 'Hide chart' : 'Show chart'}
-                  </Text>
-                </Flex>
-              </Flex>
-              {expandedCharts.has(key) && (
-                <PropertyComparisonChart
-                  name={key}
-                  outlierValueOccurences={
-                    outlierValueOccurences.get(key) ?? new Map()
-                  }
-                  inlierValueOccurences={
-                    inlierValueOccurences.get(key) ?? new Map()
-                  }
-                  onAddFilter={onAddFilter}
-                />
-              )}
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Box>
-  );
-}
-
 // Layout constants for dynamic grid calculation.
 // CHART_WIDTH is the minimum chart width used to determine how many columns fit; actual rendered
 // width expands to fill the container (charts use width: '100%' inside a CSS grid).
@@ -887,7 +774,6 @@ export default function DBDeltaChart({
   // columnMeta is merged here (instead of a separate useMemo) so the denylist and
   // cardinality checks can reference it during the same memoization pass.
   const {
-    sortedProperties,
     outlierValueOccurences,
     inlierValueOccurences,
     columnMeta,
@@ -942,15 +828,11 @@ export default function DBDeltaChart({
 
     // Split properties into visible (shown in charts) and hidden (denylist or high cardinality)
     const visibleProperties: string[] = [];
-    const hiddenProperties: HiddenProperty[] = [];
+    const hiddenProperties: string[] = [];
 
     sortedProperties.forEach(key => {
       if (isDenylisted(key, columnMeta)) {
-        const uniqueValues = Math.max(
-          outlierValueOccurences.get(key)?.size ?? 0,
-          inlierValueOccurences.get(key)?.size ?? 0,
-        );
-        hiddenProperties.push({ key, reason: 'denylist', uniqueValues });
+        hiddenProperties.push(key);
       } else if (
         isHighCardinality(
           key,
@@ -960,18 +842,13 @@ export default function DBDeltaChart({
           inlierPropertyOccurences,
         )
       ) {
-        const uniqueValues = Math.max(
-          outlierValueOccurences.get(key)?.size ?? 0,
-          inlierValueOccurences.get(key)?.size ?? 0,
-        );
-        hiddenProperties.push({ key, reason: 'cardinality', uniqueValues });
+        hiddenProperties.push(key);
       } else {
         visibleProperties.push(key);
       }
     });
 
     return {
-      sortedProperties,
       outlierValueOccurences,
       inlierValueOccurences,
       columnMeta,
@@ -1056,6 +933,11 @@ export default function DBDeltaChart({
 
   const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE);
 
+  // Show lower-priority fields on the last page (or when there are no visible fields)
+  const showLowerPriorityFields =
+    hiddenProperties.length > 0 &&
+    (totalPages === 0 || activePage === totalPages);
+
   return (
     <Box
       ref={containerRef}
@@ -1091,37 +973,57 @@ export default function DBDeltaChart({
             />
           ))}
       </div>
+      {showLowerPriorityFields && (
+        <>
+          <Divider
+            mt="lg"
+            mb="xs"
+            label={
+              <Text size="xs" c="dimmed">
+                Lower-priority fields ({hiddenProperties.length})
+              </Text>
+            }
+            labelPosition="left"
+          />
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${columns}, 1fr)`,
+              gap: CHART_GAP,
+            }}
+          >
+            {hiddenProperties.map(key => (
+              <PropertyComparisonChart
+                name={key}
+                outlierValueOccurences={
+                  outlierValueOccurences.get(key) ?? new Map()
+                }
+                inlierValueOccurences={
+                  inlierValueOccurences.get(key) ?? new Map()
+                }
+                onAddFilter={onAddFilter ? handleAddFilter : undefined}
+                key={key}
+              />
+            ))}
+          </div>
+        </>
+      )}
       <Flex
-        justify="space-between"
+        justify="flex-end"
         align="center"
         style={{
           marginTop: 'auto',
           paddingTop: CHART_GAP,
-          visibility:
-            totalPages > 1 || hiddenProperties.length > 0
-              ? 'visible'
-              : 'hidden',
+          visibility: totalPages > 1 ? 'visible' : 'hidden',
         }}
       >
-        <Text size="xs" c="dimmed">
-          {hiddenProperties.length > 0
-            ? `Showing ${visibleProperties.length} of ${sortedProperties.length} fields`
-            : ' '}
-        </Text>
         <Pagination
           size="xs"
           value={activePage}
           onChange={setPage}
           total={totalPages}
-          style={{ visibility: totalPages > 1 ? 'visible' : 'hidden' }}
         />
       </Flex>
-      <HiddenFieldsSection
-        hiddenProperties={hiddenProperties}
-        outlierValueOccurences={outlierValueOccurences}
-        inlierValueOccurences={inlierValueOccurences}
-        onAddFilter={onAddFilter ? handleAddFilter : undefined}
-      />
     </Box>
   );
 }
