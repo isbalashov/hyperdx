@@ -838,12 +838,14 @@ function Heatmap({
     };
   }, [width, height, tickFormatter]);
 
-  // Restore the persisted selection after uPlot initializes (e.g., after
-  // the component remounts due to config change). Converts data-unit coordinates
-  // (xMin/xMax in seconds, yMin/yMax in value units) back to pixel positions.
+  // Restore the persisted selection after uPlot initializes AND data has loaded.
+  // The uPlot `init` hook fires before data is available so scales aren't set yet —
+  // pixel conversion would return NaN/Infinity. We also depend on `data[0].length`
+  // so the effect re-runs once the heatmap data actually arrives.
+  const dataLength = data[0].length;
   useEffect(() => {
     const u = uplotRef.current;
-    if (!u || !initialSelection) return;
+    if (!u || !initialSelection || dataLength < 2) return;
     const { offsetLeft, offsetTop } = u.over;
     // xMin/xMax are stored in seconds; uPlot x-axis is in milliseconds
     const left = u.valToPos(initialSelection.xMin * 1000, 'x');
@@ -871,7 +873,7 @@ function Heatmap({
       yMax: initialSelection.yMax,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uplotInitCount]);
+  }, [uplotInitCount, dataLength]);
 
   return (
     <div

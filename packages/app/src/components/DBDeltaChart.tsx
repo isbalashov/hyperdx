@@ -660,6 +660,7 @@ function PropertyComparisonChart({
                     position="top"
                     withArrow
                     fz="xs"
+                    zIndex={10000}
                   >
                     <ActionIcon
                       variant="primary"
@@ -677,6 +678,7 @@ function PropertyComparisonChart({
                     position="top"
                     withArrow
                     fz="xs"
+                    zIndex={10000}
                   >
                     <ActionIcon
                       variant="secondary"
@@ -696,6 +698,7 @@ function PropertyComparisonChart({
                 position="top"
                 withArrow
                 fz="xs"
+                zIndex={10000}
               >
                 <ActionIcon
                   variant="secondary"
@@ -1070,12 +1073,30 @@ export default function DBDeltaChart({
     );
   }
 
-  const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE);
+  // Include lower-priority fields in pagination so they don't create an
+  // unbounded last page. All fields are paginated together; a divider separates
+  // the two groups on pages that contain both.
+  const totalProperties = visibleProperties.length + hiddenProperties.length;
+  const totalPages = Math.ceil(totalProperties / PAGE_SIZE);
 
-  // Show lower-priority fields on the last page (or when there are no visible fields)
-  const showLowerPriorityFields =
-    hiddenProperties.length > 0 &&
-    (totalPages === 0 || activePage === totalPages);
+  const pageStart = (activePage - 1) * PAGE_SIZE;
+  const pageEnd = activePage * PAGE_SIZE;
+
+  // Primary (visible) fields on the current page
+  const visibleOnPage = visibleProperties.slice(
+    Math.max(0, pageStart),
+    Math.min(visibleProperties.length, pageEnd),
+  );
+
+  // Lower-priority (hidden) fields on the current page
+  const hiddenPageStart = Math.max(0, pageStart - visibleProperties.length);
+  const hiddenPageEnd = Math.max(0, pageEnd - visibleProperties.length);
+  const hiddenOnPage = hiddenProperties.slice(hiddenPageStart, hiddenPageEnd);
+
+  // Show a divider when both sections appear on the same page
+  const showDivider = visibleOnPage.length > 0 && hiddenOnPage.length > 0;
+  // Show a header when ONLY hidden fields appear on this page (no divider above)
+  const showHiddenHeader = hiddenOnPage.length > 0 && visibleOnPage.length === 0;
 
   return (
     <Box
@@ -1089,16 +1110,16 @@ export default function DBDeltaChart({
         flexDirection: 'column',
       }}
     >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${columns}, 1fr)`,
-          gap: CHART_GAP,
-        }}
-      >
-        {visibleProperties
-          .slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE)
-          .map(property => (
+      {/* Primary fields — own grid so empty trailing cells don't interact with divider */}
+      {visibleOnPage.length > 0 && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${columns}, 1fr)`,
+            gap: CHART_GAP,
+          }}
+        >
+          {visibleOnPage.map(property => (
             <PropertyComparisonChart
               name={property}
               outlierValueOccurences={
@@ -1111,41 +1132,44 @@ export default function DBDeltaChart({
               key={property}
             />
           ))}
-      </div>
-      {showLowerPriorityFields && (
-        <>
-          <Divider
-            mt="lg"
-            mb="xs"
-            label={
-              <Text size="xs" c="dimmed">
-                Lower-priority fields ({hiddenProperties.length})
-              </Text>
-            }
-            labelPosition="left"
-          />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${columns}, 1fr)`,
-              gap: CHART_GAP,
-            }}
-          >
-            {hiddenProperties.map(key => (
-              <PropertyComparisonChart
-                name={key}
-                outlierValueOccurences={
-                  outlierValueOccurences.get(key) ?? new Map()
-                }
-                inlierValueOccurences={
-                  inlierValueOccurences.get(key) ?? new Map()
-                }
-                onAddFilter={onAddFilter ? handleAddFilter : undefined}
-                key={key}
-              />
-            ))}
-          </div>
-        </>
+        </div>
+      )}
+      {/* Divider between primary and lower-priority fields */}
+      {(showDivider || showHiddenHeader) && (
+        <Divider
+          mt="lg"
+          mb="xs"
+          label={
+            <Text size="xs" c="dimmed">
+              Lower-priority fields ({hiddenProperties.length})
+            </Text>
+          }
+          labelPosition="left"
+        />
+      )}
+      {/* Lower-priority fields — separate grid so rows align independently */}
+      {hiddenOnPage.length > 0 && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${columns}, 1fr)`,
+            gap: CHART_GAP,
+          }}
+        >
+          {hiddenOnPage.map(key => (
+            <PropertyComparisonChart
+              name={key}
+              outlierValueOccurences={
+                outlierValueOccurences.get(key) ?? new Map()
+              }
+              inlierValueOccurences={
+                inlierValueOccurences.get(key) ?? new Map()
+              }
+              onAddFilter={onAddFilter ? handleAddFilter : undefined}
+              key={key}
+            />
+          ))}
+        </div>
       )}
       <Flex
         justify="flex-end"
