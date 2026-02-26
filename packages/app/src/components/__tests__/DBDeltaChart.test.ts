@@ -497,8 +497,23 @@ describe('computeYValue', () => {
     expect(computeYValue('Duration / 1000000', { Duration: 5000000 })).toBeCloseTo(5);
   });
 
+  it('handles parenthesized column in division "(Col)/N" (getDurationMsExpression format)', () => {
+    expect(computeYValue('(Duration)/1e6', { Duration: 5000000 })).toBeCloseTo(5);
+    expect(computeYValue('(Duration) / 1e6', { Duration: 5000000 })).toBeCloseTo(5);
+    expect(computeYValue('(Duration)/1000000', { Duration: 5000000 })).toBeCloseTo(5);
+  });
+
+  it('handles simple parenthesized column reference "(Col)"', () => {
+    expect(computeYValue('(Duration)', { Duration: 5000000 })).toBe(5000000);
+  });
+
   it('handles multiplication expression "Col * N"', () => {
     expect(computeYValue('Duration * 0.001', { Duration: 5000000 })).toBeCloseTo(5000);
+  });
+
+  it('handles parenthesized column in multiplication "(Col) * N"', () => {
+    expect(computeYValue('(Duration) * 0.001', { Duration: 5000000 })).toBeCloseTo(5000);
+    expect(computeYValue('(Duration)*0.001', { Duration: 5000000 })).toBeCloseTo(5000);
   });
 
   it('handles scientific notation divisor', () => {

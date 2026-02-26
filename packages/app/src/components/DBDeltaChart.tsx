@@ -396,8 +396,12 @@ export function computeYValue(
 ): number | null {
   const trimmed = valueExpr.trim();
 
-  // Simple column reference: "Duration"
-  const simpleMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+  // Identifier pattern (with optional surrounding parentheses):
+  // Matches "ColName" and "(ColName)"
+  const identPat = '\\(?([A-Za-z_][A-Za-z0-9_]*)\\)?';
+
+  // Simple column reference: "Duration" or "(Duration)"
+  const simpleMatch = trimmed.match(new RegExp(`^${identPat}$`));
   if (simpleMatch) {
     const v = flatRow[simpleMatch[1]];
     if (v == null) return null;
@@ -405,9 +409,10 @@ export function computeYValue(
     return isNaN(n) ? null : n;
   }
 
-  // Division: "Duration / 1000000"
+  // Division: "Duration / 1000000", "(Duration)/1e6", "(Duration) / 1e6"
+  const numPat = '([0-9]+(?:\\.[0-9]+)?(?:e[+-]?[0-9]+)?)';
   const divMatch = trimmed.match(
-    /^([A-Za-z_][A-Za-z0-9_]*)\s*\/\s*([0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)$/i,
+    new RegExp(`^${identPat}\\s*\\/\\s*${numPat}$`, 'i'),
   );
   if (divMatch) {
     const v = flatRow[divMatch[1]];
@@ -417,9 +422,9 @@ export function computeYValue(
     return isNaN(n) || isNaN(d) || d === 0 ? null : n / d;
   }
 
-  // Multiplication: "Duration * 0.001"
+  // Multiplication: "Duration * 0.001", "(Duration) * 0.001"
   const mulMatch = trimmed.match(
-    /^([A-Za-z_][A-Za-z0-9_]*)\s*\*\s*([0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)$/i,
+    new RegExp(`^${identPat}\\s*\\*\\s*${numPat}$`, 'i'),
   );
   if (mulMatch) {
     const v = flatRow[mulMatch[1]];

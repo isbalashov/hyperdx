@@ -856,9 +856,10 @@ function Heatmap({
         },
         {
           // Correlation highlight: draws filled rectangles on the heatmap canvas
-          // at the cells corresponding to spans matching the hovered attribute value.
-          // When Y values are available, highlights the precise heatmap cell (correct
-          // X + Y bucket). Falls back to a full-height column when Y is unavailable.
+          // at the columns corresponding to spans matching the hovered attribute value.
+          // Groups spans by X time column and draws a single continuous rect from
+          // min(duration) to max(duration) per column, so the highlight only covers
+          // the actual duration range of matching spans — not the full chart height.
           hooks: {
             init: (u: uPlot) => {
               // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -881,10 +882,39 @@ function Heatmap({
               const xSizePx = Math.abs(
                 u.valToPos(xBinIncr, 'x', true) - u.valToPos(0, 'x', true),
               );
-              // For Y: larger values → smaller canvas y (inverted axis)
               const ySizePx = Math.abs(
                 u.valToPos(yBinIncr, 'y', true) - u.valToPos(0, 'y', true),
               );
+
+              // Group spans by their pixel-snapped X column so we can draw a single
+              // continuous rect per time column covering [minY, maxY] of matching spans.
+              type ColumnInfo = {
+                xLeft: number;
+                minY: number | null;
+                maxY: number | null;
+              };
+              const columnMap = new Map<number, ColumnInfo>();
+
+              for (const { tsMs, yValue } of pts) {
+                const xLeft = Math.round(
+                  u.valToPos(tsMs, 'x', true) - xSizePx / 2,
+                );
+                const existing = columnMap.get(xLeft);
+                if (existing) {
+                  if (yValue != null) {
+                    existing.minY =
+                      existing.minY == null
+                        ? yValue
+                        : Math.min(existing.minY, yValue);
+                    existing.maxY =
+                      existing.maxY == null
+                        ? yValue
+                        : Math.max(existing.maxY, yValue);
+                  }
+                } else {
+                  columnMap.set(xLeft, { xLeft, minY: yValue, maxY: yValue });
+                }
+              }
 
               u.ctx.save();
               u.ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
@@ -892,36 +922,33 @@ function Heatmap({
 
               u.ctx.fillStyle = 'rgba(255, 220, 50, 0.6)';
 
-              // Deduplicate drawn cells to avoid overdraw
-              const drawnCells = new Set<string>();
-
-              for (const { tsMs, yValue } of pts) {
-                const xPx = u.valToPos(tsMs, 'x', true);
-                const xLeft = xPx - xSizePx / 2;
-
-                if (yValue != null) {
-                  // Snap to nearest Y bin boundary so the rect aligns with heatmap cells.
-                  // ys[0] is the first bin start value; bins increase by yBinIncr.
-                  const binIdx = Math.max(
-                    0,
-                    Math.round((yValue - ys[0]) / yBinIncr),
-                  );
-                  const binStartValue = ys[0] + binIdx * yBinIncr;
-                  // In canvas coords, larger value → smaller y (inverted).
-                  // Top of bin = position of (binStart + yBinIncr), bottom of bin = position of binStart.
-                  const topPx = u.valToPos(binStartValue + yBinIncr, 'y', true);
-                  const cellKey = `${Math.round(xLeft)},${Math.round(topPx)}`;
-                  if (!drawnCells.has(cellKey)) {
-                    drawnCells.add(cellKey);
-                    u.ctx.fillRect(xLeft, topPx, xSizePx, ySizePx);
-                  }
+              for (const { xLeft, minY, maxY } of columnMap.values()) {
+                if (minY == null || maxY == null) {
+                  // No Y values available — highlight the full time column
+                  u.ctx.fillRect(xLeft, u.bbox.top, xSizePx, u.bbox.height);
                 } else {
-                  // No Y value available — highlight the full time column
-                  const cellKey = `x:${Math.round(xLeft)}`;
-                  if (!drawnCells.has(cellKey)) {
-                    drawnCells.add(cellKey);
-                    u.ctx.fillRect(xLeft, u.bbox.top, xSizePx, u.bbox.height);
-                  }
+                  // Snap min/max to bin boundaries so rects align with heatmap cells.
+                  // ys[0] is the first bin start value; bins increase by yBinIncr.
+                  const minBinIdx = Math.max(
+                    0,
+                    Math.round((minY - ys[0]) / yBinIncr),
+                  );
+                  const maxBinIdx = Math.max(
+                    0,
+                    Math.round((maxY - ys[0]) / yBinIncr),
+                  );
+                  const minBinStart = ys[0] + minBinIdx * yBinIncr;
+                  const maxBinEnd = ys[0] + (maxBinIdx + 1) * yBinIncr;
+
+                  // In canvas coords: larger Y value → smaller pixel y (inverted axis).
+                  // Top of highest bin = valToPos(maxBinEnd),
+                  // bottom of lowest bin = valToPos(minBinStart).
+                  const topPx = u.valToPos(maxBinEnd, 'y', true);
+                  const bottomPx = u.valToPos(minBinStart, 'y', true);
+                  // Ensure at least one bin height is drawn
+                  const heightPx = Math.max(ySizePx, bottomPx - topPx);
+
+                  u.ctx.fillRect(xLeft, topPx, xSizePx, heightPx);
                 }
               }
 
