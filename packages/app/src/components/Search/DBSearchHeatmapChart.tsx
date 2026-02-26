@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseAsFloat, parseAsString, useQueryStates } from 'nuqs';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -69,6 +69,23 @@ export function DBSearchHeatmapChart({
     },
     [onAddFilter, setFields],
   );
+
+  // When the user changes the timeframe, reset any existing selection so the
+  // delta chart returns to distribution-only mode (no comparison).
+  const dateRangeRef = useRef(chartConfig.dateRange);
+  useEffect(() => {
+    const prev = dateRangeRef.current;
+    const next = chartConfig.dateRange;
+    if (
+      prev[0].getTime() !== next[0].getTime() ||
+      prev[1].getTime() !== next[1].getTime()
+    ) {
+      dateRangeRef.current = next;
+      setFields({ xMin: null, xMax: null, yMin: null, yMax: null });
+    } else {
+      dateRangeRef.current = next;
+    }
+  }, [chartConfig.dateRange, setFields]);
 
   return (
     <Flex

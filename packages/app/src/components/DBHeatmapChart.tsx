@@ -697,12 +697,17 @@ function Heatmap({
     | undefined
   >(undefined);
 
+  // After the user clicks "Filter by Selection", hide that button so only "X" remains.
+  // Resets to false when the selection is cleared.
+  const [hasFiltered, setHasFiltered] = useState(false);
+
   // Refs for correlation highlight overlay: uPlot instance + latest highlight timestamps
   const uplotRef = useRef<uPlot | null>(null);
 
   // Clears the React selection state AND the uPlot selection rectangle
   const clearSelectionAndRect = useCallback(() => {
     setSelectingInfo(undefined);
+    setHasFiltered(false);
     if (uplotRef.current) {
       try {
         uplotRef.current.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
@@ -897,11 +902,16 @@ function Heatmap({
               u.ctx.clip();
               u.ctx.fillStyle = 'rgba(255, 220, 50, 0.6)';
 
-              // Deduplicate by (xi, yi) cell so we don't overdraw the same cell.
-              const drawnCells = new Set<number>();
+              // Group points by X bucket and compute min/max Y bucket per column.
+              // Drawing a continuous rect from min to max makes highlights visible
+              // even when all matching spans have similar Y values (would otherwise
+              // render as a single 1-cell sliver, hard to see).
+              const xBucketRange = new Map<
+                number,
+                { yiMin: number; yiMax: number; xPx: number; full: boolean }
+              >();
 
               for (const { tsMs, yValue } of pts) {
-                // Find which x bucket this timestamp falls into
                 const xi = Math.max(
                   0,
                   Math.min(
@@ -909,21 +919,14 @@ function Heatmap({
                     Math.round((tsMs - xs[0]) / xBinIncr),
                   ),
                 );
-                // Use the exact x value from data (same as heatmapPaths cxs[xi])
                 const xPx = u.valToPos(xs[xi * yBinQty], 'x', true);
-                const cx = Math.round(xPx - xSizePx / 2);
 
                 if (yValue == null) {
-                  // Full-height column fallback when Y value is unavailable
-                  const cellKey = xi * -1 - 1; // negative keys = full-column
-                  if (!drawnCells.has(cellKey)) {
-                    drawnCells.add(cellKey);
-                    u.ctx.fillRect(cx, u.bbox.top, xSizePx, u.bbox.height);
-                  }
+                  // Mark this column as full-height
+                  xBucketRange.set(xi, { yiMin: 0, yiMax: yBinQty - 1, xPx, full: true });
                   continue;
                 }
 
-                // Find which y bucket this value falls into
                 const yi = Math.max(
                   0,
                   Math.min(
@@ -931,17 +934,29 @@ function Heatmap({
                     Math.round((yValue - ys[0]) / yBinIncr),
                   ),
                 );
-                const cellKey = xi * (yBinQty + 1) + yi;
-                if (drawnCells.has(cellKey)) continue;
-                drawnCells.add(cellKey);
 
-                // Mirror heatmapPaths centering: cx = valToPos(x) - xSize/2
-                //                               cy = valToPos(y) - ySizePx/2
-                // ys[yi] is the y bucket start value for bin yi.
-                const yPx = u.valToPos(ys[yi], 'y', true);
-                const cy = Math.round(yPx - ySizePx / 2);
+                const existing = xBucketRange.get(xi);
+                if (!existing) {
+                  xBucketRange.set(xi, { yiMin: yi, yiMax: yi, xPx, full: false });
+                } else if (!existing.full) {
+                  existing.yiMin = Math.min(existing.yiMin, yi);
+                  existing.yiMax = Math.max(existing.yiMax, yi);
+                }
+              }
 
-                u.ctx.fillRect(cx, cy, xSizePx, ySizePx);
+              for (const [, { yiMin, yiMax, xPx, full }] of xBucketRange) {
+                const cx = Math.round(xPx - xSizePx / 2);
+                if (full) {
+                  u.ctx.fillRect(cx, u.bbox.top, xSizePx, u.bbox.height);
+                } else {
+                  // Y axis is inverted: higher value = smaller pixel position (top).
+                  // valToPos(ys[yiMax]) gives the top pixel, valToPos(ys[yiMin]) gives the bottom.
+                  const topPx = u.valToPos(ys[yiMax], 'y', true);
+                  const botPx = u.valToPos(ys[yiMin], 'y', true);
+                  const cy = Math.round(topPx - ySizePx / 2);
+                  const h = Math.round(botPx - topPx + ySizePx);
+                  u.ctx.fillRect(cx, cy, xSizePx, Math.max(h, ySizePx));
+                }
               }
 
               u.ctx.restore();
@@ -1036,7 +1051,7 @@ function Heatmap({
             left: selectingInfo.left,
           }}
         >
-          {onFilter != null && (
+          {onFilter != null && !hasFiltered && (
             <div
               className="px-2 py-1"
               role="button"
@@ -1049,8 +1064,8 @@ function Heatmap({
                   selectingInfo.yMin,
                   selectingInfo.yMax,
                 );
-                // Keep the selection rectangle visible after filtering so the user
-                // can see what area was selected. They can clear it with the X button.
+                // Hide the Filter button — only the X (clear) button remains.
+                setHasFiltered(true);
               }}
             >
               Filter by Selection
@@ -1062,7 +1077,7 @@ function Heatmap({
             title="Clear selection"
             style={{
               cursor: 'pointer',
-              borderLeft: onFilter != null ? '1px solid #5F6776' : undefined,
+              borderLeft: onFilter != null && !hasFiltered ? '1px solid #5F6776' : undefined,
             }}
             onClick={e => {
               e.stopPropagation();

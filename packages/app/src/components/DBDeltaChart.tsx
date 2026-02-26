@@ -1136,8 +1136,12 @@ export default function DBDeltaChart({
       }
     });
 
-    // Precompute flattened raw data for hover-based timestamp lookup
-    const flattenedRawData = actualOutlierData.map(flattenData);
+    // Precompute flattened raw data for hover-based timestamp lookup.
+    // Combine outlier + inlier so highlights show ALL matching spans (not just the selection subset).
+    const flattenedRawData = [
+      ...actualOutlierData.map(flattenData),
+      ...actualInlierData.map(flattenData),
+    ];
 
     return {
       outlierValueOccurences,
