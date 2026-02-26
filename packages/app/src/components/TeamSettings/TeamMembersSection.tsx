@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { HTTPError } from 'ky';
 import CopyToClipboard from 'react-copy-to-clipboard';
 import {
@@ -9,20 +9,28 @@ import {
   Divider,
   Group,
   Modal,
+  Pagination,
+  Select,
   Stack,
   Table,
   Text,
   TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconLock, IconUserPlus } from '@tabler/icons-react';
+import {
+  IconLock,
+  IconSearch,
+  IconShieldCheck,
+  IconUserPlus,
+} from '@tabler/icons-react';
 
 import api from '@/api';
 import { useBrandDisplayName } from '@/theme/ThemeProvider';
 
 export default function TeamMembersSection() {
   const brandName = useBrandDisplayName();
-  const hasAdminAccess = true;
+  const { data: me } = api.useMe();
+  const hasAdminAccess = me?.role === 'admin';
 
   const { data: team } = api.useTeam();
   const {
@@ -40,6 +48,47 @@ export default function TeamMembersSection() {
   const onSubmitTeamInviteForm = ({ email }: { email: string }) => {
     sendTeamInviteAction(email);
     setTeamInviteModalShow(false);
+  };
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  const allMembers: any[] = Array.isArray(members?.data)
+    ? members.data
+    : [];
+
+  const filteredMembers = useMemo(() => {
+    let result = allMembers;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (m: any) =>
+          m.name?.toLowerCase().includes(q) ||
+          m.email?.toLowerCase().includes(q),
+      );
+    }
+    if (roleFilter) {
+      result = result.filter((m: any) => m.role === roleFilter);
+    }
+    return result;
+  }, [allMembers, searchQuery, roleFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMembers.length / PAGE_SIZE));
+  const paginatedMembers = filteredMembers.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  // Reset to page 1 when filters change
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
+  const handleRoleFilterChange = (value: string | null) => {
+    setRoleFilter(value);
+    setCurrentPage(1);
   };
 
   const [
@@ -212,7 +261,17 @@ export default function TeamMembersSection() {
       <Card>
         <Card.Section withBorder py="sm" px="lg">
           <Group align="center" justify="space-between">
-            <div className="fs-7">Team Members</div>
+            <div className="fs-7">
+              Team Members
+              {!isLoadingMembers && (
+                <Text span fz="xs" c="dimmed" ml="xs">
+                  ({filteredMembers.length}
+                  {filteredMembers.length !== allMembers.length &&
+                    ` of ${allMembers.length}`}
+                  )
+                </Text>
+              )}
+            </div>
             <Button
               variant="primary"
               leftSection={<IconUserPlus size={16} />}
@@ -222,12 +281,36 @@ export default function TeamMembersSection() {
             </Button>
           </Group>
         </Card.Section>
+        <Card.Section py="sm" px="lg">
+          <Group gap="sm">
+            <TextInput
+              placeholder="Search by name or email…"
+              leftSection={<IconSearch size={16} />}
+              value={searchQuery}
+              onChange={e => handleSearchChange(e.target.value)}
+              style={{ flex: 1 }}
+              size="sm"
+            />
+            <Select
+              placeholder="All roles"
+              data={[
+                { value: 'admin', label: 'Admin' },
+                { value: 'member', label: 'Member' },
+                { value: 'viewer', label: 'Viewer' },
+              ]}
+              value={roleFilter}
+              onChange={handleRoleFilterChange}
+              clearable
+              size="sm"
+              w={140}
+            />
+          </Group>
+        </Card.Section>
         <Card.Section>
           <Table horizontalSpacing="lg" verticalSpacing="xs">
             <Table.Tbody>
               {!isLoadingMembers &&
-                Array.isArray(members?.data) &&
-                members?.data.map((member: any) => (
+                paginatedMembers.map((member: any) => (
                   <Table.Tr key={member.email}>
                     <Table.Td>
                       <div>
@@ -247,9 +330,31 @@ export default function TeamMembersSection() {
                             <IconLock size={14} /> Password Auth
                           </div>
                         )}
+                        {member.hasOidc && (
+                          <div>
+                            <IconShieldCheck size={14} /> SSO
+                          </div>
+                        )}
                       </Group>
                     </Table.Td>
                     <Table.Td>
+                      {member.role && (
+                        <Badge
+                          variant="light"
+                          color={
+                            member.role === 'admin'
+                              ? 'blue'
+                              : member.role === 'viewer'
+                                ? 'gray'
+                                : 'green'
+                          }
+                          fw="normal"
+                          tt="capitalize"
+                          mr="xs"
+                        >
+                          {member.role}
+                        </Badge>
+                      )}
                       {member.groupName && (
                         <Badge
                           variant="light"
@@ -282,6 +387,15 @@ export default function TeamMembersSection() {
                     </Table.Td>
                   </Table.Tr>
                 ))}
+              {!isLoadingMembers && paginatedMembers.length === 0 && (
+                <Table.Tr>
+                  <Table.Td colSpan={3}>
+                    <Text c="dimmed" ta="center" py="md" fz="sm">
+                      No members match your search
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              )}
               {!isLoadingInvitations &&
                 Array.isArray(invitations.data) &&
                 invitations.data.map((invitation: any) => (
@@ -325,6 +439,18 @@ export default function TeamMembersSection() {
             </Table.Tbody>
           </Table>
         </Card.Section>
+        {totalPages > 1 && (
+          <Card.Section py="sm" px="lg">
+            <Group justify="center">
+              <Pagination
+                total={totalPages}
+                value={currentPage}
+                onChange={setCurrentPage}
+                size="sm"
+              />
+            </Group>
+          </Card.Section>
+        )}
       </Card>
 
       <Modal

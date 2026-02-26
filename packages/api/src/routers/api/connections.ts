@@ -9,7 +9,7 @@ import {
   getConnections,
   updateConnection,
 } from '@/controllers/connection';
-import { getNonNullUserWithTeam } from '@/middleware/auth';
+import { getNonNullUserWithTeam, requireRole } from '@/middleware/auth';
 
 const router = express.Router();
 
@@ -25,6 +25,7 @@ router.get('/', async (req, res, next) => {
 
 router.post(
   '/',
+  requireRole('admin'),
   validateRequest({
     body: ConnectionSchema.omit({ id: true }),
   }),
@@ -48,6 +49,7 @@ router.post(
 
 router.put(
   '/:id',
+  requireRole('admin'),
   validateRequest({
     body: ConnectionSchema,
   }),
@@ -105,7 +107,7 @@ router.put(
   },
 );
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireRole('admin'), async (req, res, next) => {
   try {
     const { teamId } = getNonNullUserWithTeam(req);
 

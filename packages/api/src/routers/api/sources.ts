@@ -12,7 +12,7 @@ import {
   getSources,
   updateSource,
 } from '@/controllers/sources';
-import { getNonNullUserWithTeam } from '@/middleware/auth';
+import { getNonNullUserWithTeam, requireRole } from '@/middleware/auth';
 import { objectIdSchema } from '@/utils/zod';
 
 const router = express.Router();
@@ -33,6 +33,7 @@ const SourceSchemaNoId = sourceSchemaWithout({ id: true });
 
 router.post(
   '/',
+  requireRole('admin'),
   validateRequest({
     body: SourceSchemaNoId,
   }),
@@ -55,6 +56,7 @@ router.post(
 
 router.put(
   '/:id',
+  requireRole('admin'),
   validateRequest({
     body: SourceSchema,
     params: z.object({
@@ -85,6 +87,7 @@ router.put(
 
 router.delete(
   '/:id',
+  requireRole('admin'),
   validateRequest({
     params: z.object({
       id: objectIdSchema,

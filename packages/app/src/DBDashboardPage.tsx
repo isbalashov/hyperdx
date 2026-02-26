@@ -91,6 +91,7 @@ import { useDashboardRefresh } from './hooks/useDashboardRefresh';
 import { useBrandDisplayName } from './theme/ThemeProvider';
 import { parseAsStringWithNewLines } from './utils/queryParsers';
 import { buildTableRowSearchUrl, DEFAULT_CHART_CONFIG } from './ChartUtils';
+import api from './api';
 import { IS_LOCAL_MODE } from './config';
 import { useDashboard } from './dashboard';
 import DashboardFilters from './DashboardFilters';
@@ -131,6 +132,7 @@ const Tile = forwardRef(
       granularity,
       onTimeRangeSelect,
       filters,
+      isReadOnly,
 
       // Properties forwarded by grid layout
       className,
@@ -152,6 +154,7 @@ const Tile = forwardRef(
       granularity: SQLInterval | undefined;
       onTimeRangeSelect: (start: Date, end: Date) => void;
       filters?: Filter[];
+      isReadOnly?: boolean;
 
       // Properties forwarded by grid layout
       className?: string;
@@ -245,6 +248,7 @@ const Tile = forwardRef(
     }, [alert]);
 
     const hoverToolbar = useMemo(() => {
+      if (isReadOnly) return null;
       return (
         <Flex
           gap="0px"
@@ -324,6 +328,7 @@ const Tile = forwardRef(
       chart.config.displayType,
       chart.id,
       hovered,
+      isReadOnly,
       onDeleteClick,
       onDuplicateClick,
       onEditClick,
@@ -609,7 +614,7 @@ function DashboardName({
   onSave,
 }: {
   name: string;
-  onSave: (name: string) => void;
+  onSave?: (name: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editedName, setEditedName] = useState(name);
@@ -620,11 +625,11 @@ function DashboardName({
     <Box
       ref={ref}
       pe="md"
-      onDoubleClick={() => setEditing(true)}
-      className="cursor-pointer"
-      title="Double click to edit"
+      onDoubleClick={onSave ? () => setEditing(true) : undefined}
+      className={onSave ? 'cursor-pointer' : undefined}
+      title={onSave ? 'Double click to edit' : undefined}
     >
-      {editing ? (
+      {editing && onSave ? (
         <form
           className="d-flex align-items-center"
           onSubmit={e => {
@@ -650,7 +655,7 @@ function DashboardName({
           <Title fw={400} order={3}>
             {name}
           </Title>
-          {hovered && (
+          {hovered && onSave && (
             <Button
               ms="xs"
               variant="subtle"
@@ -682,6 +687,8 @@ function downloadObjectAsJson(object: object, fileName = 'output') {
 function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
   const brandName = useBrandDisplayName();
   const confirm = useConfirm();
+  const { data: me } = api.useMe();
+  const isReadOnly = me?.role === 'viewer';
 
   const router = useRouter();
   const dashboardId = router.query.dashboardId as string | undefined;
@@ -982,6 +989,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
             chart={chart}
             dateRange={searchedTimeRange}
             onEditClick={() => setEditedTile(chart)}
+            isReadOnly={isReadOnly}
             granularity={
               isRefreshEnabled
                 ? granularityOverride
@@ -1189,9 +1197,11 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
             <Text size="sm">
               This is a temporary dashboard and can not be saved.
             </Text>
-            <Button variant="primary" fw={400} onClick={onCreateDashboard}>
-              Create New Saved Dashboard
-            </Button>
+            {!isReadOnly && (
+              <Button variant="primary" fw={400} onClick={onCreateDashboard}>
+                Create New Saved Dashboard
+              </Button>
+            )}
           </Flex>
         </Paper>
       )}
@@ -1199,7 +1209,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
         <DashboardName
           key={`${dashboardHash}`}
           name={dashboard?.name ?? ''}
-          onSave={editedName => {
+          onSave={isReadOnly ? undefined : editedName => {
             if (dashboard != null) {
               setDashboard({
                 ...dashboard,
@@ -1209,7 +1219,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
           }}
         />
         <Group gap="xs">
-          {!isLocalDashboard && dashboard?.id && (
+          {!isReadOnly && !isLocalDashboard && dashboard?.id && (
             <Tags
               allowCreate
               values={dashboard?.tags || []}
@@ -1227,7 +1237,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
               </Button>
             </Tags>
           )}
-          {!isLocalDashboard /* local dashboards cant be "deleted" */ && (
+          {!isReadOnly && !isLocalDashboard /* local dashboards cant be "deleted" */ && (
             <Menu width={250}>
               <Menu.Target>
                 <ActionIcon
@@ -1473,22 +1483,26 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
               }}
               cols={24}
               rowHeight={32}
+              isDraggable={!isReadOnly}
+              isResizable={!isReadOnly}
             >
               {tiles}
             </ReactGridLayout>
           </ErrorBoundary>
         ) : null}
       </Box>
-      <Button
-        data-testid="add-new-tile-button"
-        variant={dashboard?.tiles.length === 0 ? 'primary' : 'secondary'}
-        mt="sm"
-        fw={400}
-        onClick={onAddTile}
-        w="100%"
-      >
-        + Add New Tile
-      </Button>
+      {!isReadOnly && (
+        <Button
+          data-testid="add-new-tile-button"
+          variant={dashboard?.tiles.length === 0 ? 'primary' : 'secondary'}
+          mt="sm"
+          fw={400}
+          onClick={onAddTile}
+          w="100%"
+        >
+          + Add New Tile
+        </Button>
+      )}
       <DashboardFiltersModal
         opened={showFiltersModal}
         onClose={() => setShowFiltersModal(false)}

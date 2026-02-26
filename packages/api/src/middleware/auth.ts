@@ -6,6 +6,7 @@ import { serializeError } from 'serialize-error';
 import * as config from '@/config';
 import { findUserByAccessKey } from '@/controllers/user';
 import type { UserDocument } from '@/models/user';
+import type { UserRole } from '@/models/user';
 import logger from '@/utils/logger';
 
 declare global {
@@ -130,4 +131,53 @@ export function getNonNullUserWithTeam(req: Request) {
   }
 
   return { teamId: user.team, userId: user._id, email: user.email };
+}
+
+/**
+ * Role hierarchy: admin > member > viewer
+ * A user with a higher role can access endpoints that require a lower role.
+ */
+const ROLE_HIERARCHY: Record<UserRole, number> = {
+  admin: 3,
+  member: 2,
+  viewer: 1,
+};
+
+/**
+ * Middleware factory that checks if the authenticated user has at least the
+ * specified role. Must be used AFTER isUserAuthenticated.
+ *
+ * Usage: router.post('/dangerous', isUserAuthenticated, requireRole('admin'), handler)
+ */
+export function requireRole(minimumRole: UserRole) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    // In local app mode, skip role checks (local user has full access)
+    if (config.IS_LOCAL_APP_MODE) {
+      return next();
+    }
+
+    const user = req.user;
+    if (!user) {
+      return res.sendStatus(401);
+    }
+
+    const userRole: UserRole = (user as any).role || 'member';
+    const userLevel = ROLE_HIERARCHY[userRole] ?? 0;
+    const requiredLevel = ROLE_HIERARCHY[minimumRole] ?? 0;
+
+    if (userLevel < requiredLevel) {
+      logger.warn(
+        {
+          userId: user._id,
+          userRole,
+          requiredRole: minimumRole,
+          path: req.path,
+        },
+        'Access denied: insufficient role',
+      );
+      return res.status(403).json({ error: 'insufficientRole' });
+    }
+
+    next();
+  };
 }

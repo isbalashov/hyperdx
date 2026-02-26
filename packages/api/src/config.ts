@@ -47,6 +47,29 @@ export const CLICKHOUSE_HOST = env.CLICKHOUSE_HOST as string;
 export const CLICKHOUSE_USER = env.CLICKHOUSE_USER as string;
 export const CLICKHOUSE_PASSWORD = env.CLICKHOUSE_PASSWORD as string;
 
+// OIDC / Keycloak Configuration
+export const OIDC_ENABLED = env.OIDC_ENABLED === 'true';
+export const OIDC_ISSUER_BASE_URL = env.OIDC_ISSUER_BASE_URL as string; // e.g. https://keycloak.example.com/realms/hyperdx
+export const OIDC_CLIENT_ID = env.OIDC_CLIENT_ID as string;
+export const OIDC_CLIENT_SECRET = env.OIDC_CLIENT_SECRET as string;
+export const OIDC_CALLBACK_URL =
+  (env.OIDC_CALLBACK_URL ||
+    `${env.FRONTEND_URL || DEFAULT_FRONTEND_URL}/api/auth/oidc/callback`) as string;
+export const OIDC_SCOPE = (env.OIDC_SCOPE || 'openid profile email') as string;
+// Mapping from Keycloak realm/client roles to HyperDX roles
+// Format: JSON object { "keycloak_role": "hdx_role" }
+// Default: admin→admin, member→member, viewer→viewer
+export const OIDC_ROLE_MAPPING = env.OIDC_ROLE_MAPPING
+  ? JSON.parse(env.OIDC_ROLE_MAPPING)
+  : { admin: 'admin', member: 'member', viewer: 'viewer' };
+export const OIDC_DEFAULT_ROLE = (env.OIDC_DEFAULT_ROLE || 'member') as
+  | 'admin'
+  | 'member'
+  | 'viewer';
+// Which Keycloak token claim contains roles (default: realm_access.roles)
+export const OIDC_ROLES_CLAIM = (env.OIDC_ROLES_CLAIM ||
+  'realm_access.roles') as string;
+
 // AI Assistant
 // Provider-agnostic configuration (preferred)
 export const AI_PROVIDER = env.AI_PROVIDER as string; // 'anthropic' | 'openai'

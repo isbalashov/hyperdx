@@ -5,7 +5,7 @@ import { validateRequest } from 'zod-express-middleware';
 
 import { CODE_VERSION } from '@/config';
 import { getConnectionById } from '@/controllers/connection';
-import { getNonNullUserWithTeam } from '@/middleware/auth';
+import { getNonNullUserWithTeam, requireRole } from '@/middleware/auth';
 import { validateRequestHeaders } from '@/middleware/validation';
 import logger from '@/utils/logger';
 import { objectIdSchema } from '@/utils/zod';
@@ -17,6 +17,7 @@ const CUSTOM_SETTING_KEY_USER_SUFFIX = 'user';
 
 router.post(
   '/test',
+  requireRole('admin'),
   validateRequest({
     body: z.object({
       host: z.string().url(),

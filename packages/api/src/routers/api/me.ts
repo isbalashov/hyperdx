@@ -1,6 +1,6 @@
 import express from 'express';
 
-import { AI_API_KEY, ANTHROPIC_API_KEY, USAGE_STATS_ENABLED } from '@/config';
+import { AI_API_KEY, ANTHROPIC_API_KEY, OIDC_ENABLED, USAGE_STATS_ENABLED } from '@/config';
 import { getTeam } from '@/controllers/team';
 import { Api404Error } from '@/utils/errors';
 
@@ -30,8 +30,11 @@ router.get('/', async (req, res, next) => {
       id,
       name,
       team,
+      role: (req.user as any).role || 'admin',
+      hasOidc: (req.user as any).oidcSubject != null,
       usageStatsEnabled: USAGE_STATS_ENABLED,
       aiAssistantEnabled: !!(AI_API_KEY || ANTHROPIC_API_KEY),
+      oidcEnabled: OIDC_ENABLED,
     });
   } catch (e) {
     next(e);

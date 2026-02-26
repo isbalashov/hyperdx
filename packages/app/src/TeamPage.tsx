@@ -169,8 +169,9 @@ function IntegrationsSection() {
 
 function TeamNameSection() {
   const { data: team, refetch: refetchTeam } = api.useTeam();
+  const { data: me } = api.useMe();
   const setTeamName = api.useSetTeamName();
-  const hasAdminAccess = true;
+  const hasAdminAccess = me?.role === 'admin';
   const [isEditingTeamName, setIsEditingTeamName] = useState(false);
   const form = useForm<{ name: string }>({
     defaultValues: {
@@ -294,7 +295,7 @@ function ClickhouseSettingForm({
 }: ClickhouseSettingFormProps) {
   const { data: me, refetch: refetchMe } = api.useMe();
   const updateClickhouseSettings = api.useUpdateClickhouseSettings();
-  const hasAdminAccess = true;
+  const hasAdminAccess = me?.role === 'admin';
   const [isEditing, setIsEditing] = useState(false);
   const currentValue = me?.team[settingKey];
 
@@ -553,7 +554,7 @@ function ApiKeysSection() {
   const { data: team, refetch: refetchTeam } = api.useTeam();
   const { data: me, isLoading: isLoadingMe } = api.useMe();
   const rotateTeamApiKey = api.useRotateTeamApiKey();
-  const hasAdminAccess = true;
+  const hasAdminAccess = me?.role === 'admin';
   const [
     rotateApiKeyConfirmationModalShow,
     setRotateApiKeyConfirmationModalShow,
@@ -653,8 +654,17 @@ function ApiKeysSection() {
 export default function TeamPage() {
   const brandName = useBrandDisplayName();
   const { data: team, isLoading } = api.useTeam();
+  const { data: me, isLoading: isLoadingMe } = api.useMe();
   const hasAllowedAuthMethods =
     team?.allowedAuthMethods != null && team?.allowedAuthMethods.length > 0;
+
+  if (!isLoadingMe && me != null && me.role !== 'admin') {
+    return (
+      <Center mt="xl">
+        <Text c="dimmed">You don&apos;t have permission to view this page.</Text>
+      </Center>
+    );
+  }
 
   return (
     <div className="TeamPage">

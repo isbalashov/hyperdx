@@ -64,6 +64,7 @@ type AppNavUserMenuProps = {
   teamName?: string;
   logoutUrl?: string | null;
   onClickUserPreferences?: () => void;
+  isAdmin?: boolean;
 };
 
 export const AppNavUserMenu = ({
@@ -71,6 +72,7 @@ export const AppNavUserMenu = ({
   teamName,
   logoutUrl,
   onClickUserPreferences,
+  isAdmin = false,
 }: AppNavUserMenuProps) => {
   const { isCollapsed } = React.useContext(AppNavContext);
 
@@ -130,17 +132,8 @@ export const AppNavUserMenu = ({
         </Paper>
       </Menu.Target>
       <Menu.Dropdown>
-        {IS_LOCAL_MODE ? (
+        {IS_LOCAL_MODE && (
           <Menu.Label fz="xs">Local mode</Menu.Label>
-        ) : (
-          <Menu.Item
-            data-testid="team-settings-menu-item"
-            href="/team"
-            component={Link}
-            leftSection={<IconSettings size={16} />}
-          >
-            Team Settings
-          </Menu.Item>
         )}
         <Menu.Item
           data-testid="user-preferences-menu-item"

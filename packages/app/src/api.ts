@@ -293,6 +293,18 @@ const api = {
       },
     });
   },
+  useOidcConfig() {
+    return useQuery<{ enabled: boolean }, Error>({
+      queryKey: ['auth/oidc/config'],
+      queryFn: () => {
+        if (IS_LOCAL_MODE) {
+          return { enabled: false };
+        }
+        return hdxServer('auth/oidc/config').json();
+      },
+      staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+    });
+  },
   useMe() {
     return useQuery<any>({
       queryKey: [`me`],

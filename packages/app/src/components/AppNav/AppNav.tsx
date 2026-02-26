@@ -892,8 +892,8 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               </Collapse>
             )}
 
-            {/* Team Settings (Cloud only) */}
-            {!IS_LOCAL_MODE && (
+            {/* Team Settings (Cloud only, admin only) */}
+            {!IS_LOCAL_MODE && meData?.role === 'admin' && (
               <AppNavLink
                 label="Team Settings"
                 href="/team"
@@ -902,15 +902,6 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             )}
           </div>
 
-          {!isCollapsed && (
-            <div
-              style={{ width: navWidth }}
-              className={styles.onboardingSection}
-            >
-              <OnboardingChecklist onAddDataClick={openInstallInstructions} />
-              <AppNavCloudBanner />
-            </div>
-          )}
         </ScrollArea>
 
         <div className={styles.footer} style={{ width: navWidth }}>
@@ -923,6 +914,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             teamName={meData?.team?.name}
             onClickUserPreferences={openUserPreferences}
             logoutUrl={IS_LOCAL_MODE ? null : `/api/logout`}
+            isAdmin={meData?.role === 'admin'}
           />
           {meData && meData.usageStatsEnabled && (
             <img

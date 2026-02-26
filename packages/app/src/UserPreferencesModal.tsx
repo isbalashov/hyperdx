@@ -1,7 +1,10 @@
 import * as React from 'react';
+import { useState } from 'react';
+import CopyToClipboard from 'react-copy-to-clipboard';
 import {
   Autocomplete,
   Badge,
+  Button,
   Divider,
   Group,
   Modal,
@@ -11,8 +14,14 @@ import {
   Text,
   Tooltip,
 } from '@mantine/core';
-import { IconFlask } from '@tabler/icons-react';
+import {
+  IconCheck,
+  IconClipboard,
+  IconFlask,
+  IconKey,
+} from '@tabler/icons-react';
 
+import api from './api';
 import { OPTIONS_FONTS } from './config/fonts';
 import { useAppTheme } from './theme/ThemeProvider';
 import { isValidThemeName, themes } from './theme';
@@ -63,6 +72,8 @@ export const UserPreferencesModal = ({
 }) => {
   const { userPreferences, setUserPreference } = useUserPreferences();
   const { themeName, setTheme, isDev } = useAppTheme();
+  const { data: me } = api.useMe();
+  const [copied, setCopied] = useState(false);
 
   return (
     <Modal
@@ -201,6 +212,44 @@ export const UserPreferencesModal = ({
               data={OPTIONS_FONTS}
             />
           </SettingContainer>
+        )}
+
+        {me?.accessKey && (
+          <>
+            <Divider label="API" labelPosition="left" mt="sm" />
+            <SettingContainer
+              label={
+                <Group gap="xs">
+                  <IconKey size={16} />
+                  Personal API Access Key
+                </Group>
+              }
+              description="Use this key to authenticate with the HyperDX API"
+            >
+              <CopyToClipboard
+                text={me.accessKey}
+                onCopy={() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                <Button
+                  variant={copied ? 'light' : 'default'}
+                  color="gray"
+                  size="xs"
+                  rightSection={
+                    copied ? (
+                      <IconCheck size={14} />
+                    ) : (
+                      <IconClipboard size={14} />
+                    )
+                  }
+                >
+                  {copied ? 'Copied!' : 'Copy Key'}
+                </Button>
+              </CopyToClipboard>
+            </SettingContainer>
+          </>
         )}
       </Stack>
     </Modal>

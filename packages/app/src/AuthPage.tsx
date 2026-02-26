@@ -6,13 +6,14 @@ import { HTTPError } from 'ky';
 import { SubmitHandler, useForm, useWatch } from 'react-hook-form';
 import {
   Button,
+  Divider,
   Notification,
   Paper,
   PasswordInput,
   Stack,
   TextInput,
 } from '@mantine/core';
-import { IconAt, IconLock } from '@tabler/icons-react';
+import { IconAt, IconLock, IconShieldCheck } from '@tabler/icons-react';
 
 import { useBrandDisplayName } from './theme/ThemeProvider';
 import api from './api';
@@ -53,7 +54,10 @@ export default function AuthPage({ action }: { action: 'register' | 'login' }) {
   const { err, msg } = router.query;
 
   const { data: installation } = api.useInstallation();
+  const { data: oidcConfig } = api.useOidcConfig();
   const registerPassword = api.useRegisterPassword();
+
+  const isOidcEnabled = oidcConfig?.enabled === true;
 
   const verificationSent = msg === 'verify';
 
@@ -214,6 +218,25 @@ export default function AuthPage({ action }: { action: 'register' | 'login' }) {
                         ? 'Register'
                         : 'Login'}
                   </Button>
+                  {isOidcEnabled && (
+                    <>
+                      <Divider
+                        label="or"
+                        labelPosition="center"
+                        my="xs"
+                      />
+                      <Button
+                        component="a"
+                        href="/api/auth/oidc"
+                        variant="default"
+                        size="md"
+                        leftSection={<IconShieldCheck size={18} />}
+                        data-test-id="oidc-login"
+                      >
+                        Continue with SSO
+                      </Button>
+                    </>
+                  )}
                 </Stack>
               </Paper>
 
@@ -234,7 +257,9 @@ export default function AuthPage({ action }: { action: 'register' | 'login' }) {
                           ? 'Password authentication is not allowed by your team admin.'
                           : err === 'teamAlreadyExists'
                             ? 'Team already exists, please login instead.'
-                            : 'Unknown error occurred, please try again later.'}
+                            : err === 'oidcFail'
+                              ? 'SSO login failed. Please check your Keycloak configuration or try again.'
+                              : 'Unknown error occurred, please try again later.'}
                 </Notification>
               )}
 

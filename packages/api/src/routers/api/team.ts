@@ -18,6 +18,7 @@ import {
   findUserByEmail,
   findUsersByTeam,
 } from '@/controllers/user';
+import { requireRole } from '@/middleware/auth';
 import TeamInvite from '@/models/teamInvite';
 import { objectIdSchema } from '@/utils/zod';
 
@@ -52,7 +53,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.patch('/apiKey', async (req, res, next) => {
+router.patch('/apiKey', requireRole('admin'), async (req, res, next) => {
   try {
     const teamId = req.user?.team;
     if (teamId == null) {
@@ -67,6 +68,7 @@ router.patch('/apiKey', async (req, res, next) => {
 
 router.patch(
   '/name',
+  requireRole('admin'),
   validateRequest({
     body: z.object({
       name: z.string().min(1).max(100),
@@ -89,6 +91,7 @@ router.patch(
 
 router.patch(
   '/clickhouse-settings',
+  requireRole('admin'),
   processRequest({
     body: TeamClickHouseSettingsSchema,
   }),
@@ -121,6 +124,7 @@ router.patch(
 
 router.post(
   '/invitation',
+  requireRole('admin'),
   validateRequest({
     body: z.object({
       email: z.string().email(),
@@ -176,7 +180,7 @@ router.post(
   },
 );
 
-router.get('/invitations', async (req, res, next) => {
+router.get('/invitations', requireRole('admin'), async (req, res, next) => {
   try {
     const teamId = req.user?.team;
     if (teamId == null) {
@@ -207,6 +211,7 @@ router.get('/invitations', async (req, res, next) => {
 
 router.delete(
   '/invitation/:id',
+  requireRole('admin'),
   validateRequest({
     params: z.object({
       id: objectIdSchema,
@@ -244,6 +249,8 @@ router.get('/members', async (req, res, next) => {
           'name',
           'hasPasswordAuth',
         ]),
+        role: (user as any).role || 'admin',
+        hasOidc: !!(user as any).oidcSubject,
         isCurrentUser: user._id.equals(userId),
       })),
     });
@@ -254,6 +261,7 @@ router.get('/members', async (req, res, next) => {
 
 router.delete(
   '/member/:id',
+  requireRole('admin'),
   validateRequest({
     params: z.object({
       id: objectIdSchema,

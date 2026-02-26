@@ -103,6 +103,8 @@ const HISTORY_ITEMS = 18;
 
 function AckAlert({ alert }: { alert: AlertsPageItem }) {
   const queryClient = useQueryClient();
+  const { data: me } = api.useMe();
+  const isReadOnly = me?.role === 'viewer';
   const silenceAlert = api.useSilenceAlert();
   const unsilenceAlert = api.useUnsilenceAlert();
 
@@ -152,6 +154,10 @@ function AckAlert({ alert }: { alert: AlertsPageItem }) {
     },
     [alert._id, mutateOptions, silenceAlert],
   );
+
+  if (isReadOnly) {
+    return null;
+  }
 
   if (alert.silenced?.at) {
     return (

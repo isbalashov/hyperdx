@@ -13,6 +13,7 @@ import {
   updateAlert,
 } from '@/controllers/alerts';
 import { alertSchema, objectIdSchema } from '@/utils/zod';
+import { requireRole } from '@/middleware/auth';
 
 const router = express.Router();
 
@@ -88,6 +89,7 @@ router.get('/', async (req, res, next) => {
 
 router.post(
   '/',
+  requireRole('member'),
   validateRequest({ body: alertSchema }),
   async (req, res, next) => {
     const teamId = req.user?.team;
@@ -108,6 +110,7 @@ router.post(
 
 router.put(
   '/:id',
+  requireRole('member'),
   validateRequest({
     body: alertSchema,
     params: z.object({
@@ -133,6 +136,7 @@ router.put(
 
 router.post(
   '/:id/silenced',
+  requireRole('member'),
   validateRequest({
     body: z.object({
       mutedUntil: z
@@ -173,6 +177,7 @@ router.post(
 
 router.delete(
   '/:id/silenced',
+  requireRole('member'),
   validateRequest({
     params: z.object({
       id: objectIdSchema,
@@ -201,6 +206,7 @@ router.delete(
 
 router.delete(
   '/:id',
+  requireRole('member'),
   validateRequest({
     params: z.object({
       id: objectIdSchema,

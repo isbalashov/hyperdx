@@ -17,6 +17,7 @@ import externalRoutersV2 from './routers/external-api/v2';
 import usageStats from './tasks/usageStats';
 import logger, { expressLogger } from './utils/logger';
 import passport from './utils/passport';
+import { configureOidcStrategy } from './utils/passportOidc';
 
 const app: express.Application = express();
 
@@ -52,6 +53,9 @@ app.use(session(sess));
 if (!config.IS_LOCAL_APP_MODE) {
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Initialize OIDC strategy if configured
+  configureOidcStrategy();
 }
 
 if (!config.IS_CI) {

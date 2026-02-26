@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { validateRequest } from 'zod-express-middleware';
 
 import { AlertState } from '@/models/alert';
+import { requireRole } from '@/middleware/auth';
 import Webhook, { WebhookService } from '@/models/webhook';
 import {
   handleSendGenericWebhook,
@@ -62,6 +63,7 @@ const httpHeaderValueValidator = z
 
 router.post(
   '/',
+  requireRole('admin'),
   validateRequest({
     body: z.object({
       body: z.string().optional(),
@@ -110,6 +112,7 @@ router.post(
 
 router.put(
   '/:id',
+  requireRole('admin'),
   validateRequest({
     params: z.object({
       id: z.string().refine(val => {
@@ -188,6 +191,7 @@ router.put(
 
 router.delete(
   '/:id',
+  requireRole('admin'),
   validateRequest({
     params: z.object({
       id: z.string().refine(val => {
@@ -211,6 +215,7 @@ router.delete(
 
 router.post(
   '/test',
+  requireRole('admin'),
   validateRequest({
     body: z.object({
       body: z.string().optional(),

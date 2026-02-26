@@ -1258,6 +1258,7 @@ function DBSearchPage() {
   }, [isLive]);
 
   const { data: me } = api.useMe();
+  const isReadOnly = me?.role === 'viewer';
 
   // Callback to handle when rows are expanded - kick user out of live tail
   const onExpandedRowsChange = useCallback(
@@ -1638,7 +1639,7 @@ function DBSearchPage() {
           </Box>
           {!IS_LOCAL_MODE && (
             <>
-              {!savedSearchId ? (
+              {!isReadOnly && !savedSearchId ? (
                 <Button
                   data-testid="save-search-button"
                   variant="secondary"
@@ -1648,7 +1649,7 @@ function DBSearchPage() {
                 >
                   Save
                 </Button>
-              ) : (
+              ) : !isReadOnly ? (
                 <Button
                   data-testid="update-search-button"
                   variant="secondary"
@@ -1660,8 +1661,8 @@ function DBSearchPage() {
                 >
                   Update
                 </Button>
-              )}
-              {!IS_LOCAL_MODE && (
+              ) : null}
+              {!isReadOnly && !IS_LOCAL_MODE && (
                 <Button
                   data-testid="alerts-button"
                   variant="secondary"
@@ -1672,7 +1673,7 @@ function DBSearchPage() {
                   Alerts
                 </Button>
               )}
-              {!!savedSearch && (
+              {!isReadOnly && !!savedSearch && (
                 <>
                   <Tags
                     allowCreate

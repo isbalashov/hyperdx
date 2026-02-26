@@ -136,11 +136,60 @@ router.post(
 );
 
 router.get('/logout', (req, res, next) => {
+  const idToken = (req.session as any)?.oidcIdToken;
   req.logout(function (err) {
     if (err) {
       return next(err);
     }
+    // If OIDC is enabled, redirect to Keycloak's logout endpoint
+    // so the Keycloak session is also terminated
+    if (config.OIDC_ENABLED && config.OIDC_ISSUER_BASE_URL) {
+      const postLogoutRedirect = encodeURIComponent(
+        `${config.FRONTEND_URL}/login`,
+      );
+      let logoutUrl = `${config.OIDC_ISSUER_BASE_URL}/protocol/openid-connect/logout?post_logout_redirect_uri=${postLogoutRedirect}&client_id=${config.OIDC_CLIENT_ID}`;
+      if (idToken) {
+        logoutUrl += `&id_token_hint=${idToken}`;
+      }
+      return res.redirect(logoutUrl);
+    }
     res.redirect(`${config.FRONTEND_URL}/login`);
+  });
+});
+
+// ---- OIDC / Keycloak Authentication ----
+// GET /auth/oidc → redirect to Keycloak login page
+router.get('/auth/oidc', (req, res, next) => {
+  if (!config.OIDC_ENABLED) {
+    return res.status(404).json({ error: 'OIDC is not enabled' });
+  }
+  passport.authenticate('oidc')(req, res, next);
+});
+
+// GET /auth/oidc/callback → Keycloak redirects back here after login
+router.get('/auth/oidc/callback', (req, res, next) => {
+  if (!config.OIDC_ENABLED) {
+    return res.status(404).json({ error: 'OIDC is not enabled' });
+  }
+  passport.authenticate('oidc', {
+    failureRedirect: `${config.FRONTEND_URL}/login?err=oidcFail`,
+  })(req, res, (err?: any) => {
+    if (err) {
+      logger.error({ err }, 'OIDC callback error');
+      return res.redirect(`${config.FRONTEND_URL}/login?err=oidcFail`);
+    }
+    // Persist the OIDC id_token in the session for logout
+    if ((req.user as any)?.oidcIdToken) {
+      (req.session as any).oidcIdToken = (req.user as any).oidcIdToken;
+    }
+    redirectToDashboard(req, res);
+  });
+});
+
+// GET /auth/oidc/config → public endpoint so the frontend knows if OIDC is available
+router.get('/auth/oidc/config', (_req, res) => {
+  res.json({
+    enabled: config.OIDC_ENABLED,
   });
 });
 

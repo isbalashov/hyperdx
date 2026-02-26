@@ -11,7 +11,7 @@ import {
   getSavedSearches,
   updateSavedSearch,
 } from '@/controllers/savedSearch';
-import { getNonNullUserWithTeam } from '@/middleware/auth';
+import { getNonNullUserWithTeam, requireRole } from '@/middleware/auth';
 import { objectIdSchema } from '@/utils/zod';
 
 const router = express.Router();
@@ -30,6 +30,7 @@ router.get('/', async (req, res, next) => {
 
 router.post(
   '/',
+  requireRole('member'),
   validateRequest({
     body: SavedSearchSchema.omit({ id: true }).extend({
       name: z.string().trim().min(1),
@@ -50,6 +51,7 @@ router.post(
 
 router.patch(
   '/:id',
+  requireRole('member'),
   validateRequest({
     body: SavedSearchSchema.partial().extend({
       name: z.string().trim().min(1).optional(),
@@ -98,6 +100,7 @@ router.patch(
 
 router.delete(
   '/:id',
+  requireRole('member'),
   validateRequest({ params: z.object({ id: objectIdSchema }) }),
   async (req, res, next) => {
     try {

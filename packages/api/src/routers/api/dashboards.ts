@@ -22,7 +22,7 @@ import {
   getPresetDashboardFilters,
   updatePresetDashboardFilter,
 } from '@/controllers/presetDashboardFilters';
-import { getNonNullUserWithTeam } from '@/middleware/auth';
+import { getNonNullUserWithTeam, requireRole } from '@/middleware/auth';
 import logger from '@/utils/logger';
 import { objectIdSchema } from '@/utils/zod';
 
@@ -43,6 +43,7 @@ router.get('/', async (req, res, next) => {
 
 router.post(
   '/',
+  requireRole('member'),
   validateRequest({
     body: DashboardWithoutIdSchema,
   }),
@@ -63,6 +64,7 @@ router.post(
 
 router.patch(
   '/:id',
+  requireRole('member'),
   validateRequest({
     params: z.object({
       id: objectIdSchema,
@@ -99,6 +101,7 @@ router.patch(
 
 router.delete(
   '/:id',
+  requireRole('member'),
   validateRequest({
     params: z.object({ id: objectIdSchema }),
   }),
@@ -147,6 +150,7 @@ router.get(
 
 router.put(
   '/preset/:presetDashboard/filter',
+  requireRole('member'),
   validateRequest({
     body: z.object({
       filter: PresetDashboardFilterSchema,
@@ -184,6 +188,7 @@ router.put(
 
 router.post(
   '/preset/:presetDashboard/filter',
+  requireRole('member'),
   validateRequest({
     body: z.object({
       filter: PresetDashboardFilterSchema,
@@ -217,6 +222,7 @@ router.post(
 
 router.delete(
   '/preset/:presetDashboard/filter/:id',
+  requireRole('member'),
   validateRequest({
     params: z.object({
       presetDashboard: z.nativeEnum(PresetDashboard),

@@ -23,6 +23,14 @@ dev-up:
 dev-down:
 	docker compose -f docker-compose.dev.yml down
 
+.PHONY: dev-keycloak-up
+dev-keycloak-up:
+	yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose -f docker-compose.dev.yml -f docker-compose.keycloak.yml up -d && yarn app:dev
+
+.PHONY: dev-keycloak-down
+dev-keycloak-down:
+	docker compose -f docker-compose.dev.yml -f docker-compose.keycloak.yml down
+
 .PHONY: dev-lint
 dev-lint:
 	npx nx run-many -t lint:fix

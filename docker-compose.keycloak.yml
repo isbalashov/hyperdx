@@ -1,0 +1,48 @@
+# Extends the dev compose with a Keycloak instance for OIDC testing.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml -f docker-compose.keycloak.yml up -d
+#
+# Or via the Makefile shortcut:
+#   make dev-keycloak-up
+#
+# Keycloak admin console: http://localhost:8180
+#   admin / admin
+#
+# Pre-configured test users (realm: hyperdx):
+#   admin@hyperdx.io  / admin123   → admin role
+#   member@hyperdx.io / member123  → member role
+#   viewer@hyperdx.io / viewer123  → viewer role
+#
+# The "hyperdx" OIDC client is pre-created with:
+#   client_id:     hyperdx
+#   client_secret: hyperdx-dev-secret
+#   redirect_uri:  http://localhost:8080/api/auth/oidc/callback
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8180"
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./docker/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - .volumes/keycloak_data:/opt/keycloak/data/h2
+    networks:
+      - internal
+    healthcheck:
+      test: >-
+        exec 3<>/dev/tcp/127.0.0.1/8180 &&
+        echo -e 'GET /health/ready HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n' >&3 &&
+        timeout 5 cat <&3 | grep -q '200 OK'
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
