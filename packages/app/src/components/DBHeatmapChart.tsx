@@ -284,6 +284,7 @@ function HeatmapContainer({
   config,
   enabled = true,
   onFilter,
+  onClearSelection,
   title,
   toolbarPrefix,
   toolbarSuffix,
@@ -292,6 +293,7 @@ function HeatmapContainer({
   config: HeatmapChartConfig;
   enabled?: boolean;
   onFilter?: (xMin: number, xMax: number, yMin: number, yMax: number) => void;
+  onClearSelection?: () => void;
   title?: React.ReactNode;
   toolbarPrefix?: React.ReactNode[];
   toolbarSuffix?: React.ReactNode[];
@@ -557,6 +559,7 @@ function HeatmapContainer({
           data={[time, bucket, count]}
           numberFormat={config.numberFormat}
           onFilter={onFilter}
+          onClearSelection={onClearSelection}
           highlightTimestampMs={highlightTimestampMs}
         />
       )}
@@ -669,11 +672,13 @@ function Heatmap({
   data,
   numberFormat,
   onFilter,
+  onClearSelection,
   highlightTimestampMs,
 }: {
   data: Mode2DataArray;
   numberFormat?: NumberFormat;
   onFilter?: (xMin: number, xMax: number, yMin: number, yMax: number) => void;
+  onClearSelection?: () => void;
   highlightTimestampMs?: number[] | null;
 }) {
   const [selectingInfo, setSelectingInfo] = useState<
@@ -694,6 +699,17 @@ function Heatmap({
 
   // Refs for correlation highlight overlay: uPlot instance + latest highlight timestamps
   const uplotRef = useRef<uPlot | null>(null);
+
+  // Clears the React selection state AND the uPlot selection rectangle
+  const clearSelectionAndRect = useCallback(() => {
+    setSelectingInfo(undefined);
+    if (uplotRef.current) {
+      try {
+        uplotRef.current.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+      } catch (_) {}
+    }
+    onClearSelection?.();
+  }, [onClearSelection]);
   const highlightTimestampMsRef = useRef<number[] | null>(null);
   // Keep ref in sync with latest prop value on every render
   highlightTimestampMsRef.current = highlightTimestampMs ?? null;
@@ -846,8 +862,8 @@ function Heatmap({
               u.ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
               u.ctx.clip();
 
-              u.ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-              u.ctx.lineWidth = 1.5;
+              u.ctx.strokeStyle = 'rgba(255, 220, 50, 0.9)';
+              u.ctx.lineWidth = 3;
 
               // Deduplicate pixel positions to avoid drawing overlapping lines
               const seenX = new Set<number>();
@@ -946,30 +962,55 @@ function Heatmap({
           </div>
         </>
       )}
-      {selectingInfo != null && onFilter != null && (
+      {selectingInfo != null && (
         <div
-          className="px-2 py-1 fs-8"
+          className="fs-8"
           style={{
+            display: 'flex',
+            gap: 4,
             backdropFilter: 'blur(4px)',
             backgroundColor: 'rgba(#1A1D23 0.4)',
             border: '1px solid #5F6776',
             borderRadius: 2,
             position: 'absolute',
-            bottom: height - selectingInfo?.top + 4,
-            left: selectingInfo?.left,
+            bottom: height - selectingInfo.top + 4,
+            left: selectingInfo.left,
           }}
-          onClick={e => {
-            e.stopPropagation();
-            onFilter?.(
-              selectingInfo.xMin / 1000,
-              selectingInfo.xMax / 1000,
-              selectingInfo.yMin,
-              selectingInfo.yMax,
-            );
-          }}
-          role="button"
         >
-          Filter by Selection
+          {onFilter != null && (
+            <div
+              className="px-2 py-1"
+              role="button"
+              style={{ cursor: 'pointer' }}
+              onClick={e => {
+                e.stopPropagation();
+                onFilter(
+                  selectingInfo.xMin / 1000,
+                  selectingInfo.xMax / 1000,
+                  selectingInfo.yMin,
+                  selectingInfo.yMax,
+                );
+                clearSelectionAndRect();
+              }}
+            >
+              Filter by Selection
+            </div>
+          )}
+          <div
+            className="px-2 py-1"
+            role="button"
+            title="Clear selection"
+            style={{
+              cursor: 'pointer',
+              borderLeft: onFilter != null ? '1px solid #5F6776' : undefined,
+            }}
+            onClick={e => {
+              e.stopPropagation();
+              clearSelectionAndRect();
+            }}
+          >
+            ✕
+          </div>
         </div>
       )}
     </div>

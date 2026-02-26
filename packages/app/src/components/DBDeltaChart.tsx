@@ -17,7 +17,6 @@ import {
   Filter,
 } from '@hyperdx/common-utils/dist/types';
 import {
-  ActionIcon,
   Box,
   Code,
   Container,
@@ -31,7 +30,6 @@ import {
   IconCopy,
   IconFilter,
   IconFilterX,
-  IconX,
 } from '@tabler/icons-react';
 
 import { isAggregateFunction } from '@/ChartUtils';
@@ -521,6 +519,8 @@ function PropertyComparisonChart({
     clientY: number;
   } | null>(null);
   const [copiedValue, setCopiedValue] = useState(false);
+  // Local hover state for bar dimming — dims non-hovered bars for prominence
+  const [hoveredBar, setHoveredBar] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const chartWrapperRef = useRef<HTMLDivElement>(null);
   // Track last hovered bar value to avoid firing onHoverValue on every pixel move
@@ -594,6 +594,7 @@ function PropertyComparisonChart({
             if (newVal !== lastHoveredBarRef.current) {
               lastHoveredBarRef.current = newVal;
               onHoverValue?.(name, newVal);
+              setHoveredBar(newVal);
             }
           }}
           onMouseLeave={() => {
@@ -601,6 +602,7 @@ function PropertyComparisonChart({
               lastHoveredBarRef.current = null;
               onHoverValue?.(name, null);
             }
+            setHoveredBar(null);
           }}
         >
           <XAxis dataKey="name" tick={<TruncatedTick />} />
@@ -628,6 +630,9 @@ function PropertyComparisonChart({
                       ? getChartColorError()
                       : ALL_SPANS_COLOR
                 }
+                fillOpacity={
+                  hoveredBar !== null && entry.name !== hoveredBar ? 0.2 : 1
+                }
               />
             ))}
           </Bar>
@@ -642,6 +647,9 @@ function PropertyComparisonChart({
                 <Cell
                   key={`in-${index}`}
                   fill={entry.isOther ? '#868e96' : getChartColorSuccess()}
+                  fillOpacity={
+                    hoveredBar !== null && entry.name !== hoveredBar ? 0.2 : 1
+                  }
                 />
               ))}
             </Bar>
@@ -776,7 +784,6 @@ export default function DBDeltaChart({
   yMin: rawYMin,
   yMax: rawYMax,
   onAddFilter,
-  onClearSelection,
   onHighlightTimestamps,
 }: {
   config: ChartConfigWithDateRange;
@@ -786,7 +793,6 @@ export default function DBDeltaChart({
   yMin?: number | null;
   yMax?: number | null;
   onAddFilter?: AddFilterFn;
-  onClearSelection?: () => void;
   onHighlightTimestamps?: (timestamps: number[] | null) => void;
 }) {
   const hasSelection =
@@ -1271,18 +1277,6 @@ export default function DBDeltaChart({
                 Background
               </Text>
             </Flex>
-            {onClearSelection && (
-              <ActionIcon
-                size="xs"
-                variant="subtle"
-                color="gray"
-                onClick={onClearSelection}
-                title="Clear selection"
-                ml="auto"
-              >
-                <IconX size={12} />
-              </ActionIcon>
-            )}
           </>
         ) : (
           <>

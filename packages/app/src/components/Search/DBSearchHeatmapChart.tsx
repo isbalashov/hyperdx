@@ -124,6 +124,7 @@ export function DBSearchHeatmapChart({
               yMax,
             });
           }}
+          onClearSelection={handleClearSelection}
         />
       </div>
       <DBDeltaChart
@@ -139,7 +140,6 @@ export function DBSearchHeatmapChart({
         onAddFilter={
           onAddFilter ? handleAddFilterAndClearSelection : undefined
         }
-        onClearSelection={handleClearSelection}
         onHighlightTimestamps={setHighlightTimestampMs}
       />
     </Flex>
