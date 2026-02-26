@@ -856,10 +856,9 @@ function Heatmap({
         },
         {
           // Correlation highlight: draws filled rectangles on the heatmap canvas
-          // at the columns corresponding to spans matching the hovered attribute value.
-          // Groups spans by X time column and draws a single continuous rect from
-          // min(duration) to max(duration) per column, so the highlight only covers
-          // the actual duration range of matching spans — not the full chart height.
+          // at cells corresponding to spans matching the hovered attribute value.
+          // Mirrors heatmapPaths coordinate calculation exactly so highlights align
+          // with the heatmap cells they represent.
           hooks: {
             init: (u: uPlot) => {
               // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -869,87 +868,81 @@ function Heatmap({
               const pts = highlightPointsRef.current;
               if (!pts?.length) return;
 
-              // Derive bin sizes from the mode-2 heatmap data
+              // Derive bin geometry from the mode-2 heatmap data
               const [xs, ys] = u.data[1] as unknown as Mode2DataArray;
-              if (!xs.length || !ys.length) return;
+              if (!xs?.length || !ys?.length || xs.length < 2 || ys.length < 2)
+                return;
 
               const dlen = xs.length;
               const yBinQty = dlen - ys.lastIndexOf(ys[0]);
+              if (yBinQty < 2) return;
+              const xBinQty = Math.floor(dlen / yBinQty);
               const yBinIncr = ys[1] - ys[0]; // positive value increment per bin
               const xBinIncr = xs[yBinQty] - xs[0]; // ms increment per time bucket
+              if (yBinIncr === 0 || xBinIncr === 0) return;
 
-              // Pixel size of one bin (canvas coordinates, always positive)
+              // Compute pixel cell size using actual data points (same as heatmapPaths).
+              // Using xs[0]/ys[0] as reference avoids issues with values far outside
+              // the visible scale range (e.g. valToPos(0) on a ms-epoch time axis).
               const xSizePx = Math.abs(
-                u.valToPos(xBinIncr, 'x', true) - u.valToPos(0, 'x', true),
+                u.valToPos(xs[0] + xBinIncr, 'x', true) -
+                  u.valToPos(xs[0], 'x', true),
               );
               const ySizePx = Math.abs(
-                u.valToPos(yBinIncr, 'y', true) - u.valToPos(0, 'y', true),
+                u.valToPos(ys[0] + yBinIncr, 'y', true) -
+                  u.valToPos(ys[0], 'y', true),
               );
-
-              // Group spans by their pixel-snapped X column so we can draw a single
-              // continuous rect per time column covering [minY, maxY] of matching spans.
-              type ColumnInfo = {
-                xLeft: number;
-                minY: number | null;
-                maxY: number | null;
-              };
-              const columnMap = new Map<number, ColumnInfo>();
-
-              for (const { tsMs, yValue } of pts) {
-                const xLeft = Math.round(
-                  u.valToPos(tsMs, 'x', true) - xSizePx / 2,
-                );
-                const existing = columnMap.get(xLeft);
-                if (existing) {
-                  if (yValue != null) {
-                    existing.minY =
-                      existing.minY == null
-                        ? yValue
-                        : Math.min(existing.minY, yValue);
-                    existing.maxY =
-                      existing.maxY == null
-                        ? yValue
-                        : Math.max(existing.maxY, yValue);
-                  }
-                } else {
-                  columnMap.set(xLeft, { xLeft, minY: yValue, maxY: yValue });
-                }
-              }
 
               u.ctx.save();
               u.ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
               u.ctx.clip();
-
               u.ctx.fillStyle = 'rgba(255, 220, 50, 0.6)';
 
-              for (const { xLeft, minY, maxY } of columnMap.values()) {
-                if (minY == null || maxY == null) {
-                  // No Y values available — highlight the full time column
-                  u.ctx.fillRect(xLeft, u.bbox.top, xSizePx, u.bbox.height);
-                } else {
-                  // Snap min/max to bin boundaries so rects align with heatmap cells.
-                  // ys[0] is the first bin start value; bins increase by yBinIncr.
-                  const minBinIdx = Math.max(
-                    0,
-                    Math.round((minY - ys[0]) / yBinIncr),
-                  );
-                  const maxBinIdx = Math.max(
-                    0,
-                    Math.round((maxY - ys[0]) / yBinIncr),
-                  );
-                  const minBinStart = ys[0] + minBinIdx * yBinIncr;
-                  const maxBinEnd = ys[0] + (maxBinIdx + 1) * yBinIncr;
+              // Deduplicate by (xi, yi) cell so we don't overdraw the same cell.
+              const drawnCells = new Set<number>();
 
-                  // In canvas coords: larger Y value → smaller pixel y (inverted axis).
-                  // Top of highest bin = valToPos(maxBinEnd),
-                  // bottom of lowest bin = valToPos(minBinStart).
-                  const topPx = u.valToPos(maxBinEnd, 'y', true);
-                  const bottomPx = u.valToPos(minBinStart, 'y', true);
-                  // Ensure at least one bin height is drawn
-                  const heightPx = Math.max(ySizePx, bottomPx - topPx);
+              for (const { tsMs, yValue } of pts) {
+                // Find which x bucket this timestamp falls into
+                const xi = Math.max(
+                  0,
+                  Math.min(
+                    xBinQty - 1,
+                    Math.round((tsMs - xs[0]) / xBinIncr),
+                  ),
+                );
+                // Use the exact x value from data (same as heatmapPaths cxs[xi])
+                const xPx = u.valToPos(xs[xi * yBinQty], 'x', true);
+                const cx = Math.round(xPx - xSizePx / 2);
 
-                  u.ctx.fillRect(xLeft, topPx, xSizePx, heightPx);
+                if (yValue == null) {
+                  // Full-height column fallback when Y value is unavailable
+                  const cellKey = xi * -1 - 1; // negative keys = full-column
+                  if (!drawnCells.has(cellKey)) {
+                    drawnCells.add(cellKey);
+                    u.ctx.fillRect(cx, u.bbox.top, xSizePx, u.bbox.height);
+                  }
+                  continue;
                 }
+
+                // Find which y bucket this value falls into
+                const yi = Math.max(
+                  0,
+                  Math.min(
+                    yBinQty - 1,
+                    Math.round((yValue - ys[0]) / yBinIncr),
+                  ),
+                );
+                const cellKey = xi * (yBinQty + 1) + yi;
+                if (drawnCells.has(cellKey)) continue;
+                drawnCells.add(cellKey);
+
+                // Mirror heatmapPaths centering: cx = valToPos(x) - xSize/2
+                //                               cy = valToPos(y) - ySizePx/2
+                // ys[yi] is the y bucket start value for bin yi.
+                const yPx = u.valToPos(ys[yi], 'y', true);
+                const cy = Math.round(yPx - ySizePx / 2);
+
+                u.ctx.fillRect(cx, cy, xSizePx, ySizePx);
               }
 
               u.ctx.restore();
@@ -1062,7 +1055,18 @@ function Heatmap({
                   selectingInfo.yMin,
                   selectingInfo.yMax,
                 );
-                clearSelectionAndRect();
+                // Clear the visual overlay only — do NOT call clearSelectionAndRect()
+                // because that would call onClearSelection which resets xMin/xMax/yMin/yMax
+                // to null, immediately undoing the filter we just applied.
+                setSelectingInfo(undefined);
+                if (uplotRef.current) {
+                  try {
+                    uplotRef.current.setSelect(
+                      { left: 0, top: 0, width: 0, height: 0 },
+                      false,
+                    );
+                  } catch (_) {}
+                }
               }}
             >
               Filter by Selection
