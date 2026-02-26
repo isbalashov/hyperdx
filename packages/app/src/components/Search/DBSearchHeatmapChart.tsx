@@ -17,7 +17,7 @@ import { IconPlayerPlay } from '@tabler/icons-react';
 
 import { getDurationMsExpression } from '@/source';
 
-import DBDeltaChart, { AddFilterFn } from '../DBDeltaChart';
+import DBDeltaChart, { AddFilterFn, HighlightPoint } from '../DBDeltaChart';
 import DBHeatmapChart from '../DBHeatmapChart';
 import { SQLInlineEditorControlled } from '../SQLInlineEditor';
 
@@ -48,10 +48,10 @@ export function DBSearchHeatmapChart({
   });
   const [container, setContainer] = useState<HTMLElement | null>(null);
 
-  // Timestamps highlighted by hovering an attribute value in the delta charts.
-  // Passed to the heatmap to draw vertical overlay lines.
-  const [highlightTimestampMs, setHighlightTimestampMs] = useState<
-    number[] | null
+  // Highlight points from hovering an attribute value in the delta charts.
+  // Passed to the heatmap to draw filled cell overlays at the correct X+Y position.
+  const [highlightPoints, setHighlightPoints] = useState<
+    HighlightPoint[] | null
   >(null);
 
   const handleClearSelection = useCallback(() => {
@@ -115,7 +115,7 @@ export function DBSearchHeatmapChart({
             displayType: DisplayType.Heatmap,
           }}
           enabled={isReady}
-          highlightTimestampMs={highlightTimestampMs}
+          highlightPoints={highlightPoints}
           onFilter={(xMin, xMax, yMin, yMax) => {
             setFields({
               xMin,
@@ -140,7 +140,7 @@ export function DBSearchHeatmapChart({
         onAddFilter={
           onAddFilter ? handleAddFilterAndClearSelection : undefined
         }
-        onHighlightTimestamps={setHighlightTimestampMs}
+        onHighlightPoints={setHighlightPoints}
       />
     </Flex>
   );

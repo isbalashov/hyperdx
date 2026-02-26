@@ -1,6 +1,7 @@
 import {
   applyTopNAggregation,
   computeDistributionScore,
+  computeYValue,
   flattenedKeyToSqlExpression,
   isDenylisted,
   isHighCardinality,
@@ -466,6 +467,55 @@ describe('computeDistributionScore', () => {
       new Map([['dominant', 95], ['other', 5]]),
     );
     expect(skewed).toBeGreaterThan(singleValue);
+  });
+
+  it('works correctly when percentages do not sum to 100 (all-spans mode)', () => {
+    // After the percentage fix, values represent % of ALL spans.
+    // Property "env" appears in 60% of spans: prod=40%, staging=20%.
+    // Score should be positive (skewed), not zero.
+    const score = computeDistributionScore(new Map([['prod', 40], ['staging', 20]]));
+    // mean = 30, max = 40, score = 10
+    expect(score).toBeCloseTo(10);
+  });
+
+  it('returns 0 for a single-valued property that appears in only 30% of spans', () => {
+    // 1 value at 30% (of all spans) — nValues=1, returns 0 regardless
+    expect(computeDistributionScore(new Map([['production', 30]]))).toBe(0);
+  });
+});
+
+describe('computeYValue', () => {
+  it('returns value for simple column reference', () => {
+    expect(computeYValue('Duration', { Duration: 5000000 })).toBe(5000000);
+  });
+
+  it('handles string-encoded numbers (ClickHouse UInt64)', () => {
+    expect(computeYValue('Duration', { Duration: '5000000' })).toBe(5000000);
+  });
+
+  it('handles division expression "Col / N"', () => {
+    expect(computeYValue('Duration / 1000000', { Duration: 5000000 })).toBeCloseTo(5);
+  });
+
+  it('handles multiplication expression "Col * N"', () => {
+    expect(computeYValue('Duration * 0.001', { Duration: 5000000 })).toBeCloseTo(5000);
+  });
+
+  it('handles scientific notation divisor', () => {
+    expect(computeYValue('Duration / 1e6', { Duration: 5000000 })).toBeCloseTo(5);
+  });
+
+  it('returns null when column is missing', () => {
+    expect(computeYValue('Duration / 1000000', { OtherCol: 42 })).toBeNull();
+  });
+
+  it('returns null for complex expressions it cannot parse', () => {
+    expect(computeYValue('count()', {})).toBeNull();
+    expect(computeYValue('toUnixTimestamp(Timestamp)', {})).toBeNull();
+  });
+
+  it('returns null when divisor is zero', () => {
+    expect(computeYValue('Duration / 0', { Duration: 5000 })).toBeNull();
   });
 });
 

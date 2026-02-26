@@ -288,7 +288,7 @@ function HeatmapContainer({
   title,
   toolbarPrefix,
   toolbarSuffix,
-  highlightTimestampMs,
+  highlightPoints,
 }: {
   config: HeatmapChartConfig;
   enabled?: boolean;
@@ -297,7 +297,7 @@ function HeatmapContainer({
   title?: React.ReactNode;
   toolbarPrefix?: React.ReactNode[];
   toolbarSuffix?: React.ReactNode[];
-  highlightTimestampMs?: number[] | null;
+  highlightPoints?: { tsMs: number; yValue: number | null }[] | null;
 }) {
   const dateRange = config.dateRange;
   const granularity = convertDateRangeToGranularityString(dateRange, 245);
@@ -560,7 +560,7 @@ function HeatmapContainer({
           numberFormat={config.numberFormat}
           onFilter={onFilter}
           onClearSelection={onClearSelection}
-          highlightTimestampMs={highlightTimestampMs}
+          highlightPoints={highlightPoints}
         />
       )}
     </ChartContainer>
@@ -673,13 +673,13 @@ function Heatmap({
   numberFormat,
   onFilter,
   onClearSelection,
-  highlightTimestampMs,
+  highlightPoints,
 }: {
   data: Mode2DataArray;
   numberFormat?: NumberFormat;
   onFilter?: (xMin: number, xMax: number, yMin: number, yMax: number) => void;
   onClearSelection?: () => void;
-  highlightTimestampMs?: number[] | null;
+  highlightPoints?: { tsMs: number; yValue: number | null }[] | null;
 }) {
   const [selectingInfo, setSelectingInfo] = useState<
     | {
@@ -710,16 +710,16 @@ function Heatmap({
     }
     onClearSelection?.();
   }, [onClearSelection]);
-  const highlightTimestampMsRef = useRef<number[] | null>(null);
+  const highlightPointsRef = useRef<{ tsMs: number; yValue: number | null }[] | null>(null);
   // Keep ref in sync with latest prop value on every render
-  highlightTimestampMsRef.current = highlightTimestampMs ?? null;
+  highlightPointsRef.current = highlightPoints ?? null;
 
-  // Trigger a uPlot redraw when highlight timestamps change so the draw hook re-runs
+  // Trigger a uPlot redraw when highlight points change so the draw hook re-runs
   useEffect(() => {
     if (uplotRef.current) {
       uplotRef.current.redraw(false);
     }
-  }, [highlightTimestampMs]);
+  }, [highlightPoints]);
 
   const [highlightedPoint, setHighlightedPoint] = useState<
     | {
@@ -819,6 +819,15 @@ function Heatmap({
         {
           hooks: {
             setSelect: u => {
+              // clearSelectionAndRect() calls u.setSelect({width:0,height:0}, false) to
+              // erase the visual rectangle. Even with fire=false, uPlot still fires this
+              // plugin hook. Guard against zero-size selections so the overlay doesn't
+              // reappear as a phantom after the user clears it.
+              if (u.select.width <= 0 || u.select.height <= 0) {
+                setSelectingInfo(undefined);
+                return;
+              }
+
               // Calculate offset from parent so we can render tooltip
               // relative to the parent pixels
               const { offsetLeft, offsetTop } = u.over;
@@ -846,37 +855,73 @@ function Heatmap({
           },
         },
         {
-          // Correlation highlight: draws vertical lines on the heatmap canvas
-          // at the timestamps of spans matching the hovered attribute value.
+          // Correlation highlight: draws filled rectangles on the heatmap canvas
+          // at the cells corresponding to spans matching the hovered attribute value.
+          // When Y values are available, highlights the precise heatmap cell (correct
+          // X + Y bucket). Falls back to a full-height column when Y is unavailable.
           hooks: {
             init: (u: uPlot) => {
               // eslint-disable-next-line react-hooks/exhaustive-deps
               uplotRef.current = u;
             },
             draw: (u: uPlot) => {
-              const tss = highlightTimestampMsRef.current;
-              if (!tss?.length) return;
+              const pts = highlightPointsRef.current;
+              if (!pts?.length) return;
+
+              // Derive bin sizes from the mode-2 heatmap data
+              const [xs, ys] = u.data[1] as unknown as Mode2DataArray;
+              if (!xs.length || !ys.length) return;
+
+              const dlen = xs.length;
+              const yBinQty = dlen - ys.lastIndexOf(ys[0]);
+              const yBinIncr = ys[1] - ys[0]; // positive value increment per bin
+              const xBinIncr = xs[yBinQty] - xs[0]; // ms increment per time bucket
+
+              // Pixel size of one bin (canvas coordinates, always positive)
+              const xSizePx = Math.abs(
+                u.valToPos(xBinIncr, 'x', true) - u.valToPos(0, 'x', true),
+              );
+              // For Y: larger values → smaller canvas y (inverted axis)
+              const ySizePx = Math.abs(
+                u.valToPos(yBinIncr, 'y', true) - u.valToPos(0, 'y', true),
+              );
 
               u.ctx.save();
-              // Clip to the plot area
               u.ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
               u.ctx.clip();
 
-              u.ctx.strokeStyle = 'rgba(255, 220, 50, 0.9)';
-              u.ctx.lineWidth = 3;
+              u.ctx.fillStyle = 'rgba(255, 220, 50, 0.6)';
 
-              // Deduplicate pixel positions to avoid drawing overlapping lines
-              const seenX = new Set<number>();
-              for (const ts of tss) {
-                // valToPos with true = canvas pixel coordinates
-                const x = u.valToPos(ts, 'x', true);
-                const rx = Math.round(x);
-                if (!seenX.has(rx)) {
-                  seenX.add(rx);
-                  u.ctx.beginPath();
-                  u.ctx.moveTo(x, u.bbox.top);
-                  u.ctx.lineTo(x, u.bbox.top + u.bbox.height);
-                  u.ctx.stroke();
+              // Deduplicate drawn cells to avoid overdraw
+              const drawnCells = new Set<string>();
+
+              for (const { tsMs, yValue } of pts) {
+                const xPx = u.valToPos(tsMs, 'x', true);
+                const xLeft = xPx - xSizePx / 2;
+
+                if (yValue != null) {
+                  // Snap to nearest Y bin boundary so the rect aligns with heatmap cells.
+                  // ys[0] is the first bin start value; bins increase by yBinIncr.
+                  const binIdx = Math.max(
+                    0,
+                    Math.round((yValue - ys[0]) / yBinIncr),
+                  );
+                  const binStartValue = ys[0] + binIdx * yBinIncr;
+                  // In canvas coords, larger value → smaller y (inverted).
+                  // Top of bin = position of (binStart + yBinIncr), bottom of bin = position of binStart.
+                  const topPx = u.valToPos(binStartValue + yBinIncr, 'y', true);
+                  const cellKey = `${Math.round(xLeft)},${Math.round(topPx)}`;
+                  if (!drawnCells.has(cellKey)) {
+                    drawnCells.add(cellKey);
+                    u.ctx.fillRect(xLeft, topPx, xSizePx, ySizePx);
+                  }
+                } else {
+                  // No Y value available — highlight the full time column
+                  const cellKey = `x:${Math.round(xLeft)}`;
+                  if (!drawnCells.has(cellKey)) {
+                    drawnCells.add(cellKey);
+                    u.ctx.fillRect(xLeft, u.bbox.top, xSizePx, u.bbox.height);
+                  }
                 }
               }
 
@@ -886,7 +931,7 @@ function Heatmap({
         },
       ],
     };
-    // uplotRef and highlightTimestampMsRef are stable refs — not included in deps
+    // uplotRef and highlightPointsRef are stable refs — not included in deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height, tickFormatter]);
 

@@ -301,14 +301,15 @@ function getPropertyStatistics(data: Record<string, any>[]) {
     });
   });
 
+  // Divide by total rows so percentages represent "fraction of ALL spans",
+  // not "fraction of spans that have this property". This ensures a single-valued
+  // field that only appears in 30% of spans shows 30%, not 100%.
+  const totalRows = data.length || 1;
   const percentageOccurences = new Map<string, Map<string, number>>();
   valueOccurences.forEach((valuesMap, property) => {
     const percentageMap = new Map<string, number>();
     valuesMap.forEach((valueCount, value) => {
-      percentageMap.set(
-        value,
-        (valueCount / (propertyOccurences.get(property) ?? 0)) * 100,
-      );
+      percentageMap.set(value, (valueCount / totalRows) * 100);
     });
     percentageOccurences.set(property, percentageMap);
   });
@@ -362,11 +363,17 @@ export function computeDistributionScore(
 ): number {
   const nValues = valuePercentages.size;
   if (nValues <= 1) return 0;
-  const uniformExpected = 100 / nValues;
+  // Use mean(pcts) as the uniform baseline rather than 100/n so the score
+  // works correctly even when percentages don't sum to 100 (e.g., when
+  // each value's % is computed relative to ALL spans, not just spans with this property).
+  let totalPct = 0;
   let maxPct = 0;
   valuePercentages.forEach(pct => {
+    totalPct += pct;
     if (pct > maxPct) maxPct = pct;
   });
+  if (totalPct === 0) return 0;
+  const uniformExpected = totalPct / nValues;
   return maxPct - uniformExpected;
 }
 
@@ -375,6 +382,55 @@ export type AddFilterFn = (
   value: string,
   action?: 'only' | 'exclude' | 'include',
 ) => void;
+
+export type HighlightPoint = { tsMs: number; yValue: number | null };
+
+/**
+ * Tries to compute the heatmap Y-axis value for a span from a raw flattened row.
+ * Handles simple SQL expressions: "ColName", "ColName / N", "ColName * N".
+ * Returns null if the expression is too complex or the column is missing.
+ */
+export function computeYValue(
+  valueExpr: string,
+  flatRow: Record<string, any>,
+): number | null {
+  const trimmed = valueExpr.trim();
+
+  // Simple column reference: "Duration"
+  const simpleMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (simpleMatch) {
+    const v = flatRow[simpleMatch[1]];
+    if (v == null) return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  }
+
+  // Division: "Duration / 1000000"
+  const divMatch = trimmed.match(
+    /^([A-Za-z_][A-Za-z0-9_]*)\s*\/\s*([0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)$/i,
+  );
+  if (divMatch) {
+    const v = flatRow[divMatch[1]];
+    if (v == null) return null;
+    const n = Number(v);
+    const d = parseFloat(divMatch[2]);
+    return isNaN(n) || isNaN(d) || d === 0 ? null : n / d;
+  }
+
+  // Multiplication: "Duration * 0.001"
+  const mulMatch = trimmed.match(
+    /^([A-Za-z_][A-Za-z0-9_]*)\s*\*\s*([0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)$/i,
+  );
+  if (mulMatch) {
+    const v = flatRow[mulMatch[1]];
+    if (v == null) return null;
+    const n = Number(v);
+    const m = parseFloat(mulMatch[2]);
+    return isNaN(n) || isNaN(m) ? null : n * m;
+  }
+
+  return null;
+}
 
 // Hover-only tooltip: shows value name and percentages, no action buttons.
 // Actions are handled by the click popover in PropertyComparisonChart.
@@ -784,7 +840,7 @@ export default function DBDeltaChart({
   yMin: rawYMin,
   yMax: rawYMax,
   onAddFilter,
-  onHighlightTimestamps,
+  onHighlightPoints,
 }: {
   config: ChartConfigWithDateRange;
   valueExpr: string;
@@ -793,7 +849,7 @@ export default function DBDeltaChart({
   yMin?: number | null;
   yMax?: number | null;
   onAddFilter?: AddFilterFn;
-  onHighlightTimestamps?: (timestamps: number[] | null) => void;
+  onHighlightPoints?: (points: HighlightPoint[] | null) => void;
 }) {
   const hasSelection =
     rawXMin != null && rawXMax != null && rawYMin != null && rawYMax != null;
@@ -1115,9 +1171,9 @@ export default function DBDeltaChart({
     [],
   );
 
-  // Compute timestamps of spans matching the hovered attribute value.
-  // Used to highlight corresponding time positions on the heatmap.
-  const highlightTimestampMs = useMemo(() => {
+  // Compute {tsMs, yValue} pairs for spans matching the hovered attribute value.
+  // Used to highlight corresponding heatmap cells (correct X + Y position).
+  const highlightPoints = useMemo((): HighlightPoint[] | null => {
     if (!hoveredAttributeValue) return null;
     const { property, value } = hoveredAttributeValue;
 
@@ -1130,23 +1186,26 @@ export default function DBDeltaChart({
     )?.name;
     if (!tsColName) return null;
 
-    const timestamps: number[] = [];
+    const points: HighlightPoint[] = [];
     for (const flat of flattenedRawData) {
       if (String(flat[property]) === value) {
         const ts = flat[tsColName];
         if (ts != null) {
           const tsMs = new Date(ts as string).getTime();
-          if (!isNaN(tsMs)) timestamps.push(tsMs);
+          if (!isNaN(tsMs)) {
+            const yValue = computeYValue(valueExpr, flat);
+            points.push({ tsMs, yValue });
+          }
         }
       }
     }
-    return timestamps.length > 0 ? timestamps : null;
-  }, [hoveredAttributeValue, flattenedRawData, columnMeta]);
+    return points.length > 0 ? points : null;
+  }, [hoveredAttributeValue, flattenedRawData, columnMeta, valueExpr]);
 
-  // Propagate highlight timestamps to parent (e.g., DBSearchHeatmapChart)
+  // Propagate highlight points to parent (e.g., DBSearchHeatmapChart)
   useEffect(() => {
-    onHighlightTimestamps?.(highlightTimestampMs);
-  }, [highlightTimestampMs, onHighlightTimestamps]);
+    onHighlightPoints?.(highlightPoints);
+  }, [highlightPoints, onHighlightPoints]);
 
   const [activePage, setPage] = useState(1);
 
@@ -1320,7 +1379,7 @@ export default function DBDeltaChart({
               }
               onAddFilter={onAddFilter ? handleAddFilter : undefined}
               hasSelection={hasSelection}
-              onHoverValue={onHighlightTimestamps ? handleHoverValue : undefined}
+              onHoverValue={onHighlightPoints ? handleHoverValue : undefined}
               key={property}
             />
           ))}
@@ -1359,7 +1418,7 @@ export default function DBDeltaChart({
               }
               onAddFilter={onAddFilter ? handleAddFilter : undefined}
               hasSelection={hasSelection}
-              onHoverValue={onHighlightTimestamps ? handleHoverValue : undefined}
+              onHoverValue={onHighlightPoints ? handleHoverValue : undefined}
               key={key}
             />
           ))}
