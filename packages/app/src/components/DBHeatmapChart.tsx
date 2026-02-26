@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { Plugin } from 'uplot';
 import uPlot from 'uplot';
@@ -287,6 +287,7 @@ function HeatmapContainer({
   title,
   toolbarPrefix,
   toolbarSuffix,
+  highlightTimestampMs,
 }: {
   config: HeatmapChartConfig;
   enabled?: boolean;
@@ -294,6 +295,7 @@ function HeatmapContainer({
   title?: React.ReactNode;
   toolbarPrefix?: React.ReactNode[];
   toolbarSuffix?: React.ReactNode[];
+  highlightTimestampMs?: number[] | null;
 }) {
   const dateRange = config.dateRange;
   const granularity = convertDateRangeToGranularityString(dateRange, 245);
@@ -555,6 +557,7 @@ function HeatmapContainer({
           data={[time, bucket, count]}
           numberFormat={config.numberFormat}
           onFilter={onFilter}
+          highlightTimestampMs={highlightTimestampMs}
         />
       )}
     </ChartContainer>
@@ -666,10 +669,12 @@ function Heatmap({
   data,
   numberFormat,
   onFilter,
+  highlightTimestampMs,
 }: {
   data: Mode2DataArray;
   numberFormat?: NumberFormat;
   onFilter?: (xMin: number, xMax: number, yMin: number, yMax: number) => void;
+  highlightTimestampMs?: number[] | null;
 }) {
   const [selectingInfo, setSelectingInfo] = useState<
     | {
@@ -686,6 +691,19 @@ function Heatmap({
       }
     | undefined
   >(undefined);
+
+  // Refs for correlation highlight overlay: uPlot instance + latest highlight timestamps
+  const uplotRef = useRef<uPlot | null>(null);
+  const highlightTimestampMsRef = useRef<number[] | null>(null);
+  // Keep ref in sync with latest prop value on every render
+  highlightTimestampMsRef.current = highlightTimestampMs ?? null;
+
+  // Trigger a uPlot redraw when highlight timestamps change so the draw hook re-runs
+  useEffect(() => {
+    if (uplotRef.current) {
+      uplotRef.current.redraw(false);
+    }
+  }, [highlightTimestampMs]);
 
   const [highlightedPoint, setHighlightedPoint] = useState<
     | {
@@ -811,8 +829,49 @@ function Heatmap({
             },
           },
         },
+        {
+          // Correlation highlight: draws vertical lines on the heatmap canvas
+          // at the timestamps of spans matching the hovered attribute value.
+          hooks: {
+            init: (u: uPlot) => {
+              // eslint-disable-next-line react-hooks/exhaustive-deps
+              uplotRef.current = u;
+            },
+            draw: (u: uPlot) => {
+              const tss = highlightTimestampMsRef.current;
+              if (!tss?.length) return;
+
+              u.ctx.save();
+              // Clip to the plot area
+              u.ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
+              u.ctx.clip();
+
+              u.ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+              u.ctx.lineWidth = 1.5;
+
+              // Deduplicate pixel positions to avoid drawing overlapping lines
+              const seenX = new Set<number>();
+              for (const ts of tss) {
+                // valToPos with true = canvas pixel coordinates
+                const x = u.valToPos(ts, 'x', true);
+                const rx = Math.round(x);
+                if (!seenX.has(rx)) {
+                  seenX.add(rx);
+                  u.ctx.beginPath();
+                  u.ctx.moveTo(x, u.bbox.top);
+                  u.ctx.lineTo(x, u.bbox.top + u.bbox.height);
+                  u.ctx.stroke();
+                }
+              }
+
+              u.ctx.restore();
+            },
+          },
+        },
       ],
     };
+    // uplotRef and highlightTimestampMsRef are stable refs — not included in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height, tickFormatter]);
 
   return (

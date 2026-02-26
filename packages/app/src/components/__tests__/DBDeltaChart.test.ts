@@ -1,5 +1,6 @@
 import {
   applyTopNAggregation,
+  computeDistributionScore,
   flattenedKeyToSqlExpression,
   isDenylisted,
   isHighCardinality,
@@ -403,6 +404,68 @@ describe('applyTopNAggregation', () => {
     result.slice(0, MAX_CHART_VALUES).forEach(entry => {
       expect(entry.isOther).toBeFalsy();
     });
+  });
+});
+
+describe('computeDistributionScore', () => {
+  it('returns 0 for empty map', () => {
+    expect(computeDistributionScore(new Map())).toBe(0);
+  });
+
+  it('returns 0 for a single-value field (all spans have same value)', () => {
+    // 1 value at 100% — boring, not useful for filtering
+    expect(computeDistributionScore(new Map([['production', 100]]))).toBe(0);
+  });
+
+  it('returns 0 for a perfectly uniform 2-value field', () => {
+    // 50% / 50% — uniform, nothing stands out
+    expect(
+      computeDistributionScore(new Map([['GET', 50], ['POST', 50]])),
+    ).toBe(0);
+  });
+
+  it('returns high score for a skewed 2-value field', () => {
+    // 90% / 10% → score = 90 - 50 = 40
+    const score = computeDistributionScore(
+      new Map([['fraud-detection', 90], ['auth', 10]]),
+    );
+    expect(score).toBeCloseTo(40);
+  });
+
+  it('ranks more-skewed fields higher than less-skewed fields', () => {
+    // 80%/20% → score = 80 - 50 = 30
+    const scoreA = computeDistributionScore(
+      new Map([['a', 80], ['b', 20]]),
+    );
+    // 60%/40% → score = 60 - 50 = 10
+    const scoreB = computeDistributionScore(
+      new Map([['a', 60], ['b', 40]]),
+    );
+    expect(scoreA).toBeGreaterThan(scoreB);
+  });
+
+  it('returns 0 for a perfectly uniform 3-value field', () => {
+    // 33%/33%/33% → score = 33 - 33 = 0
+    const score = computeDistributionScore(
+      new Map([['a', 33.33], ['b', 33.33], ['c', 33.33]]),
+    );
+    expect(score).toBeCloseTo(0, 1);
+  });
+
+  it('returns positive score for a skewed 3-value field', () => {
+    // 70%/20%/10% → score = 70 - 33.3 ≈ 36.7
+    const score = computeDistributionScore(
+      new Map([['a', 70], ['b', 20], ['c', 10]]),
+    );
+    expect(score).toBeCloseTo(36.67, 1);
+  });
+
+  it('single-value field scores lower than two-value skewed field', () => {
+    const singleValue = computeDistributionScore(new Map([['only', 100]]));
+    const skewed = computeDistributionScore(
+      new Map([['dominant', 95], ['other', 5]]),
+    );
+    expect(skewed).toBeGreaterThan(singleValue);
   });
 });
 

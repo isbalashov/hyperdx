@@ -17,6 +17,7 @@ import {
   Filter,
 } from '@hyperdx/common-utils/dist/types';
 import {
+  ActionIcon,
   Box,
   Code,
   Container,
@@ -30,6 +31,7 @@ import {
   IconCopy,
   IconFilter,
   IconFilterX,
+  IconX,
 } from '@tabler/icons-react';
 
 import { isAggregateFunction } from '@/ChartUtils';
@@ -347,6 +349,29 @@ function mergeValueStatisticsMaps(
   return mergedArray;
 }
 
+/**
+ * Computes a distribution skewness score for sorting properties in "all spans" mode.
+ *
+ * Score = max(pct) - (100 / n_values):
+ *   - 0 for single-value fields (all spans share the same value → not useful for filtering)
+ *   - 0 for perfectly uniform multi-value fields
+ *   - High for skewed distributions where one value dominates others
+ *
+ * @param valuePercentages - Map from value string to its percentage (0–100) of occurrences
+ */
+export function computeDistributionScore(
+  valuePercentages: Map<string, number>,
+): number {
+  const nValues = valuePercentages.size;
+  if (nValues <= 1) return 0;
+  const uniformExpected = 100 / nValues;
+  let maxPct = 0;
+  valuePercentages.forEach(pct => {
+    if (pct > maxPct) maxPct = pct;
+  });
+  return maxPct - uniformExpected;
+}
+
 export type AddFilterFn = (
   property: string,
   value: string,
@@ -464,12 +489,14 @@ function PropertyComparisonChart({
   inlierValueOccurences,
   onAddFilter,
   hasSelection,
+  onHoverValue,
 }: {
   name: string;
   outlierValueOccurences: Map<string, number>;
   inlierValueOccurences: Map<string, number>;
   onAddFilter?: AddFilterFn;
   hasSelection: boolean;
+  onHoverValue?: (property: string, value: string | null) => void;
 }) {
   const mergedValueStatistics = mergeValueStatisticsMaps(
     outlierValueOccurences,
@@ -496,6 +523,8 @@ function PropertyComparisonChart({
   const [copiedValue, setCopiedValue] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const chartWrapperRef = useRef<HTMLDivElement>(null);
+  // Track last hovered bar value to avoid firing onHoverValue on every pixel move
+  const lastHoveredBarRef = useRef<string | null>(null);
 
   // Dismiss popover when clicking outside both the popover and the chart wrapper
   useEffect(() => {
@@ -557,6 +586,22 @@ function PropertyComparisonChart({
           }}
           onClick={handleChartClick}
           style={{ cursor: 'pointer' }}
+          onMouseMove={(data: any) => {
+            const label = data?.activeLabel;
+            const isOther = data?.activePayload?.[0]?.payload?.isOther;
+            const newVal =
+              label != null && !isOther ? String(label) : null;
+            if (newVal !== lastHoveredBarRef.current) {
+              lastHoveredBarRef.current = newVal;
+              onHoverValue?.(name, newVal);
+            }
+          }}
+          onMouseLeave={() => {
+            if (lastHoveredBarRef.current !== null) {
+              lastHoveredBarRef.current = null;
+              onHoverValue?.(name, null);
+            }
+          }}
         >
           <XAxis dataKey="name" tick={<TruncatedTick />} />
           <YAxis
@@ -731,6 +776,8 @@ export default function DBDeltaChart({
   yMin: rawYMin,
   yMax: rawYMax,
   onAddFilter,
+  onClearSelection,
+  onHighlightTimestamps,
 }: {
   config: ChartConfigWithDateRange;
   valueExpr: string;
@@ -739,6 +786,8 @@ export default function DBDeltaChart({
   yMin?: number | null;
   yMax?: number | null;
   onAddFilter?: AddFilterFn;
+  onClearSelection?: () => void;
+  onHighlightTimestamps?: (timestamps: number[] | null) => void;
 }) {
   const hasSelection =
     rawXMin != null && rawXMax != null && rawYMin != null && rawYMax != null;
@@ -965,7 +1014,12 @@ export default function DBDeltaChart({
     if (uniqueKeys.size === 0) {
       uniqueKeys = new Set([...inlierValueOccurences.keys()]);
     }
-    // Now process the keys to find the ones with the highest delta between outlier and inlier percentages
+    // Sort properties by how useful they are for filtering/analysis.
+    // Comparison mode: sort by max difference between selection and background.
+    // Distribution mode (no selection): sort by deviation from uniform distribution —
+    //   score = max(pct) - (100 / n_values)
+    //   This scores 0 for single-value fields (all-same) and for perfectly uniform
+    //   multi-value fields, and scores high for skewed distributions.
     const sortedProperties = Array.from(uniqueKeys)
       .map(key => {
         const inlierCount =
@@ -973,19 +1027,21 @@ export default function DBDeltaChart({
         const outlierCount =
           outlierValueOccurences.get(key) ?? new Map<string, number>();
 
-        const mergedArray = mergeValueStatisticsMaps(
-          outlierCount,
-          inlierCount,
-        );
-        let maxValueDelta = 0;
-        mergedArray.forEach(item => {
-          const delta = Math.abs(item.outlierCount - item.inlierCount);
-          if (delta > maxValueDelta) {
-            maxValueDelta = delta;
-          }
-        });
+        let sortScore: number;
+        if (hasSelection) {
+          const mergedArray = mergeValueStatisticsMaps(outlierCount, inlierCount);
+          let maxValueDelta = 0;
+          mergedArray.forEach(item => {
+            const delta = Math.abs(item.outlierCount - item.inlierCount);
+            if (delta > maxValueDelta) maxValueDelta = delta;
+          });
+          sortScore = maxValueDelta;
+        } else {
+          // Distribution mode: sort by deviation from uniform distribution.
+          sortScore = computeDistributionScore(outlierCount);
+        }
 
-        return [key, maxValueDelta] as const;
+        return [key, sortScore] as const;
       })
       .sort((a, b) => b[1] - a[1])
       .map(a => a[0]);
@@ -1012,12 +1068,16 @@ export default function DBDeltaChart({
       }
     });
 
+    // Precompute flattened raw data for hover-based timestamp lookup
+    const flattenedRawData = actualOutlierData.map(flattenData);
+
     return {
       outlierValueOccurences,
       inlierValueOccurences,
       columnMeta,
       visibleProperties,
       hiddenProperties,
+      flattenedRawData,
     };
   }, [outlierData, inlierData, allSpansData, hasSelection]);
 
@@ -1034,6 +1094,52 @@ export default function DBDeltaChart({
     },
     [onAddFilter, columnMeta],
   );
+
+  // Track hovered attribute value for correlation highlighting on the heatmap
+  const [hoveredAttributeValue, setHoveredAttributeValue] = useState<{
+    property: string;
+    value: string;
+  } | null>(null);
+
+  const handleHoverValue = useCallback(
+    (property: string, value: string | null) => {
+      setHoveredAttributeValue(value != null ? { property, value } : null);
+    },
+    [],
+  );
+
+  // Compute timestamps of spans matching the hovered attribute value.
+  // Used to highlight corresponding time positions on the heatmap.
+  const highlightTimestampMs = useMemo(() => {
+    if (!hoveredAttributeValue) return null;
+    const { property, value } = hoveredAttributeValue;
+
+    // Find the first non-array DateTime64 column (typically 'Timestamp')
+    const tsColName = columnMeta.find(
+      c =>
+        (stripTypeWrappers(c.type).startsWith('DateTime64(') ||
+          c.type === 'DateTime64') &&
+        !stripTypeWrappers(c.type).startsWith('Array('),
+    )?.name;
+    if (!tsColName) return null;
+
+    const timestamps: number[] = [];
+    for (const flat of flattenedRawData) {
+      if (String(flat[property]) === value) {
+        const ts = flat[tsColName];
+        if (ts != null) {
+          const tsMs = new Date(ts as string).getTime();
+          if (!isNaN(tsMs)) timestamps.push(tsMs);
+        }
+      }
+    }
+    return timestamps.length > 0 ? timestamps : null;
+  }, [hoveredAttributeValue, flattenedRawData, columnMeta]);
+
+  // Propagate highlight timestamps to parent (e.g., DBSearchHeatmapChart)
+  useEffect(() => {
+    onHighlightTimestamps?.(highlightTimestampMs);
+  }, [highlightTimestampMs, onHighlightTimestamps]);
 
   const [activePage, setPage] = useState(1);
 
@@ -1164,6 +1270,18 @@ export default function DBDeltaChart({
                 Background
               </Text>
             </Flex>
+            {onClearSelection && (
+              <ActionIcon
+                size="xs"
+                variant="subtle"
+                color="gray"
+                onClick={onClearSelection}
+                title="Clear selection"
+                ml="auto"
+              >
+                <IconX size={12} />
+              </ActionIcon>
+            )}
           </>
         ) : (
           <>
@@ -1207,6 +1325,7 @@ export default function DBDeltaChart({
               }
               onAddFilter={onAddFilter ? handleAddFilter : undefined}
               hasSelection={hasSelection}
+              onHoverValue={onHighlightTimestamps ? handleHoverValue : undefined}
               key={property}
             />
           ))}
@@ -1245,6 +1364,7 @@ export default function DBDeltaChart({
               }
               onAddFilter={onAddFilter ? handleAddFilter : undefined}
               hasSelection={hasSelection}
+              onHoverValue={onHighlightTimestamps ? handleHoverValue : undefined}
               key={key}
             />
           ))}

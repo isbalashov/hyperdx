@@ -48,6 +48,16 @@ export function DBSearchHeatmapChart({
   });
   const [container, setContainer] = useState<HTMLElement | null>(null);
 
+  // Timestamps highlighted by hovering an attribute value in the delta charts.
+  // Passed to the heatmap to draw vertical overlay lines.
+  const [highlightTimestampMs, setHighlightTimestampMs] = useState<
+    number[] | null
+  >(null);
+
+  const handleClearSelection = useCallback(() => {
+    setFields({ xMin: null, xMax: null, yMin: null, yMax: null });
+  }, [setFields]);
+
   // After applying a filter, clear the heatmap selection so the delta chart
   // resets to "all spans" distribution mode instead of staying in comparison mode.
   const handleAddFilterAndClearSelection = useCallback<
@@ -105,6 +115,7 @@ export function DBSearchHeatmapChart({
             displayType: DisplayType.Heatmap,
           }}
           enabled={isReady}
+          highlightTimestampMs={highlightTimestampMs}
           onFilter={(xMin, xMax, yMin, yMax) => {
             setFields({
               xMin,
@@ -128,6 +139,8 @@ export function DBSearchHeatmapChart({
         onAddFilter={
           onAddFilter ? handleAddFilterAndClearSelection : undefined
         }
+        onClearSelection={handleClearSelection}
+        onHighlightTimestamps={setHighlightTimestampMs}
       />
     </Flex>
   );
