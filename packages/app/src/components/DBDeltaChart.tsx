@@ -980,6 +980,7 @@ export default function DBDeltaChart({
     columnMeta,
     visibleProperties,
     hiddenProperties,
+    flattenedRawData,
   } = useMemo(() => {
     const columnMeta = (
       outlierData?.meta ??
