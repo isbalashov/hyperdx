@@ -128,7 +128,7 @@ OIDC_CALLBACK_URL=http://localhost:8080/auth/callback
 A ready-to-use Keycloak setup with pre-configured realm, roles and test users is included in [`docker-compose.keycloak.yml`](./docker-compose.keycloak.yml).
 
 <p align="center">
-  <img alt="SSO login with Keycloak" src="./.github/images/sso.png" title="SSO login with Keycloak">
+  <img alt="SSO login with Keycloak" src="./.github/images/sso.png" title="SSO login with Keycloak" width="500">
 </p>
 
 ## Contributing
