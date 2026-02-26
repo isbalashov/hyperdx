@@ -819,12 +819,11 @@ function Heatmap({
         {
           hooks: {
             setSelect: u => {
-              // clearSelectionAndRect() calls u.setSelect({width:0,height:0}, false) to
-              // erase the visual rectangle. Even with fire=false, uPlot still fires this
-              // plugin hook. Guard against zero-size selections so the overlay doesn't
-              // reappear as a phantom after the user clears it.
+              // Ignore zero-size selections (single-click, or when clearSelectionAndRect()
+              // calls u.setSelect({width:0,height:0}) to erase the visual rectangle).
+              // clearSelectionAndRect() calls setSelectingInfo(undefined) directly before
+              // calling u.setSelect, so we don't need to do anything here.
               if (u.select.width <= 0 || u.select.height <= 0) {
-                setSelectingInfo(undefined);
                 return;
               }
 
@@ -837,8 +836,8 @@ function Heatmap({
               const yMax = u.posToVal(u.select.top, 'y');
               const yMin = u.posToVal(u.select.top + u.select.height, 'y');
 
-              // This ensures we set the timeout after all click handlers
-              // to prevent our state from being wiped by onclick handler
+              // Small timeout to ensure this fires after uPlot completes its
+              // synchronous drag-end processing.
               setTimeout(() => {
                 setSelectingInfo({
                   top: u.select.top + offsetTop,
@@ -959,11 +958,6 @@ function Heatmap({
     <div
       ref={ref}
       style={{ width: '100%', height: '100%', position: 'relative' }}
-      onClick={() => {
-        if (selectingInfo != null) {
-          setSelectingInfo(undefined);
-        }
-      }}
       onMouseLeave={() => {
         setHighlightedPoint(undefined);
       }}
@@ -1055,18 +1049,8 @@ function Heatmap({
                   selectingInfo.yMin,
                   selectingInfo.yMax,
                 );
-                // Clear the visual overlay only — do NOT call clearSelectionAndRect()
-                // because that would call onClearSelection which resets xMin/xMax/yMin/yMax
-                // to null, immediately undoing the filter we just applied.
-                setSelectingInfo(undefined);
-                if (uplotRef.current) {
-                  try {
-                    uplotRef.current.setSelect(
-                      { left: 0, top: 0, width: 0, height: 0 },
-                      false,
-                    );
-                  } catch (_) {}
-                }
+                // Keep the selection rectangle visible after filtering so the user
+                // can see what area was selected. They can clear it with the X button.
               }}
             >
               Filter by Selection
