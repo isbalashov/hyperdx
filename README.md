@@ -33,6 +33,7 @@ ClickHouse).
 - ⚡ Live tail logs and traces to always get the freshest events
 - 🔭 OpenTelemetry supported out of the box
 - ⏱️ Monitor health and performance from HTTP requests to DB queries (APM)
+- 🔐 SSO / OIDC authentication with role-based access control (admin / member / viewer)
 
 <br/>
 <img alt="Search logs and traces all in one place" src="./.github/images/search_splash.png" title="Search logs and traces all in one place">
@@ -103,6 +104,32 @@ include:
 
 Once HyperDX is running, you can point your OpenTelemetry SDK to the
 OpenTelemetry collector spun up at `http://localhost:4318`.
+
+## SSO / Single Sign-On
+
+HyperDX supports OIDC-based Single Sign-On (e.g. Keycloak, Okta, Auth0, Google Workspace) with a built-in three-tier role model:
+
+| Role       | Permissions                                                                     |
+|------------|---------------------------------------------------------------------------------|
+| **admin**  | Full access — manage team members, connections, sources, webhooks, and all data |
+| **member** | Read + write — create/edit dashboards, saved searches, and alerts               |
+| **viewer** | Read-only — browse dashboards and search results, no mutations                  |
+
+Enable SSO by setting the following environment variables:
+
+```bash
+OIDC_ENABLED=true
+OIDC_ISSUER_BASE_URL=https://your-keycloak/realms/hyperdx
+OIDC_CLIENT_ID=hyperdx
+OIDC_CLIENT_SECRET=your-client-secret
+OIDC_CALLBACK_URL=http://localhost:8080/auth/callback
+```
+
+A ready-to-use Keycloak setup with pre-configured realm, roles and test users is included in [`docker-compose.keycloak.yml`](./docker-compose.keycloak.yml).
+
+<p align="center">
+  <img alt="SSO login with Keycloak" src="./.github/images/sso.png" title="SSO login with Keycloak">
+</p>
 
 ## Contributing
 
