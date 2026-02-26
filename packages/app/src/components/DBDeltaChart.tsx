@@ -1267,25 +1267,33 @@ export default function DBDeltaChart({
     );
   }
 
-  // Include lower-priority fields in pagination so they don't create an
-  // unbounded last page. All fields are paginated together; a divider separates
-  // the two groups on pages that contain both.
-  const totalProperties = visibleProperties.length + hiddenProperties.length;
-  const totalPages = Math.ceil(totalProperties / PAGE_SIZE);
+  // Paginate by ROWS, not by item count, because visible and hidden fields are
+  // rendered in separate CSS grids. An incomplete last row of the visible
+  // section must not be "filled" with hidden items — each section always starts
+  // from column 1.
+  const visibleRows = Math.ceil(visibleProperties.length / columns);
+  const hiddenRows = Math.ceil(hiddenProperties.length / columns);
+  const totalRows = visibleRows + hiddenRows;
+  const totalPages = Math.ceil(totalRows / rows);
 
-  const pageStart = (activePage - 1) * PAGE_SIZE;
-  const pageEnd = activePage * PAGE_SIZE;
+  const pageRowStart = (activePage - 1) * rows;
+  const pageRowEnd = activePage * rows;
 
-  // Primary (visible) fields on the current page
+  // Rows occupied by the visible section on this page
+  const visRowStart = Math.min(pageRowStart, visibleRows);
+  const visRowEnd = Math.min(pageRowEnd, visibleRows);
   const visibleOnPage = visibleProperties.slice(
-    Math.max(0, pageStart),
-    Math.min(visibleProperties.length, pageEnd),
+    visRowStart * columns,
+    Math.min(visRowEnd * columns, visibleProperties.length),
   );
 
-  // Lower-priority (hidden) fields on the current page
-  const hiddenPageStart = Math.max(0, pageStart - visibleProperties.length);
-  const hiddenPageEnd = Math.max(0, pageEnd - visibleProperties.length);
-  const hiddenOnPage = hiddenProperties.slice(hiddenPageStart, hiddenPageEnd);
+  // Rows occupied by the hidden section on this page
+  const hidRowStart = Math.max(0, pageRowStart - visibleRows);
+  const hidRowEnd = Math.min(hiddenRows, Math.max(0, pageRowEnd - visibleRows));
+  const hiddenOnPage = hiddenProperties.slice(
+    hidRowStart * columns,
+    Math.min(hidRowEnd * columns, hiddenProperties.length),
+  );
 
   // Show a divider when both sections appear on the same page
   const showDivider = visibleOnPage.length > 0 && hiddenOnPage.length > 0;
