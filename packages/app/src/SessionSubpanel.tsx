@@ -472,6 +472,7 @@ export default function SessionSubpanel({
             rowId={rowId}
             aliasWith={aliasWith}
             isNestedPanel={true}
+            withOverlay={true}
             onClose={() => {
               setDrawerOpen(false);
               setRowId(undefined);
