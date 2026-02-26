@@ -1,5 +1,15 @@
 # @hyperdx/common-utils
 
+## 0.15.0
+
+### Minor Changes
+
+- cd2b7a76: fix: revert use_top_k_dynamic_filtering setting for issues with ORDER BY rand()
+
+### Patch Changes
+
+- d760d2db: chore: Run integration tests on different ports
+
 ## 0.14.0
 
 ### Minor Changes
